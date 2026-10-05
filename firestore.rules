@@ -1,0 +1,122 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isSpaceMember(spaceId) {
+      return isSignedIn() && exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid));
+    }
+
+    function getSpaceMemberRole(spaceId) {
+      return get(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid)).data.role;
+    }
+
+    function isSpaceAdminOrOwner(spaceId) {
+      return isSpaceMember(spaceId) && (getSpaceMemberRole(spaceId) in ['owner', 'admin']);
+    }
+
+    // Handles Collection (Atomic unique reservation)
+    match /handles/{handle} {
+      allow read: if true;
+      allow create: if isSignedIn() &&
+        !exists(/databases/$(database)/documents/handles/$(handle)) &&
+        request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // User Public Profiles
+    match /profiles/{uid} {
+      allow read: if isSignedIn();
+      allow create, update: if isUser(uid);
+      allow delete: if false;
+    }
+
+    // Private User Accounts
+    match /users/{uid} {
+      allow read, write: if isUser(uid);
+    }
+
+    // Push Devices
+    match /devices/{deviceId} {
+      allow read, write: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
+    // Spaces
+    match /spaces/{spaceId} {
+      allow read: if isSpaceMember(spaceId);
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isSpaceAdminOrOwner(spaceId);
+      allow delete: if isSpaceMember(spaceId) && getSpaceMemberRole(spaceId) == 'owner';
+
+      // Members subcollection
+      match /members/{uid} {
+        allow read: if isSpaceMember(spaceId);
+        allow create: if isUser(uid) || isSpaceAdminOrOwner(spaceId);
+        // Members can only update their own consentState; role changes require admin/owner
+        allow update: if (isUser(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['consentState']))
+                      || isSpaceAdminOrOwner(spaceId);
+        allow delete: if isUser(uid) || isSpaceAdminOrOwner(spaceId);
+      }
+
+      // Messages subcollection
+      match /messages/{messageId} {
+        allow read: if isSpaceMember(spaceId);
+        allow create: if isSpaceMember(spaceId) && request.resource.data.senderId == request.auth.uid;
+        // Authors cannot edit text or fake timestamps, but can toggle author AI withhold shield
+        allow update: if isSpaceMember(spaceId) &&
+                         resource.data.senderId == request.auth.uid &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aiWithheld']);
+        allow delete: if false;
+      }
+
+      // Items subcollection (Board tasks, decisions, questions)
+      match /items/{itemId} {
+        allow read: if isSpaceMember(spaceId);
+        allow create: if isSpaceMember(spaceId) && request.resource.data.approvedByUid == request.auth.uid;
+        allow update: if isSpaceMember(spaceId);
+        allow delete: if isSpaceAdminOrOwner(spaceId);
+      }
+
+      // Handoffs subcollection (Explicit human handoff audit trail)
+      match /handoffs/{handoffId} {
+        allow read: if isSpaceMember(spaceId);
+        allow create: if isSpaceMember(spaceId) && request.resource.data.handedByUid == request.auth.uid;
+        allow update, delete: if false; // Immutable audit log
+      }
+    }
+
+    // Proposals (AI proposals awaiting human judgment)
+    match /proposals/{proposalId} {
+      allow read: if isSignedIn() &&
+        (resource.data.createdForUid == request.auth.uid || isSpaceMember(resource.data.spaceId));
+      // Only server-side Cloud Functions create proposals
+      allow create: if false;
+      // Creator can approve, edit, or dismiss proposals
+      allow update: if isSignedIn() &&
+        (resource.data.createdForUid == request.auth.uid || isSpaceAdminOrOwner(resource.data.spaceId));
+      allow delete: if false;
+    }
+
+    // AI Outputs (Audit logs)
+    match /aiOutputs/{handoffId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Server-only
+    }
+
+    // Invites
+    match /invites/{code} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isSpaceAdminOrOwner(request.resource.data.spaceId);
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn() && isSpaceAdminOrOwner(resource.data.spaceId);
+    }
+  }
+}
