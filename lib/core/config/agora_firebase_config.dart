@@ -3,7 +3,6 @@ import 'dart:developer' as developer;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 
 /// Firebase Configuration and Emulator Suite Manager
 abstract final class AgoraFirebaseConfig {
@@ -61,10 +60,13 @@ abstract final class AgoraFirebaseConfig {
       FirebaseFirestore.instance.settings = const Settings(
         persistenceEnabled: false,
       );
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error connecting to emulator: $e');
-      }
+    } catch (e, st) {
+      developer.log(
+        'Emulator connection notice',
+        name: 'Agora',
+        error: e,
+        stackTrace: st,
+      );
     }
   }
 }

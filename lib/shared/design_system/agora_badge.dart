@@ -112,16 +112,22 @@ class AgoraConsentBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (isWithheld) {
-      return const AgoraBadge(
-        label: 'AI WITHHELD',
-        icon: Icons.shield_outlined,
-        variant: AgoraBadgeVariant.withhold,
+      return Semantics(
+        label: 'Author consent shield active: this message is withheld from AI ingestion',
+        child: const AgoraBadge(
+          label: 'AI WITHHELD',
+          icon: Icons.shield_outlined,
+          variant: AgoraBadgeVariant.withhold,
+        ),
       );
     }
-    return const AgoraBadge(
-      label: 'ELIGIBLE',
-      icon: Icons.check_circle_outline,
-      variant: AgoraBadgeVariant.neutral,
+    return Semantics(
+      label: 'Author consent allowed: eligible for explicit human handoff',
+      child: const AgoraBadge(
+        label: 'ELIGIBLE',
+        icon: Icons.check_circle_outline,
+        variant: AgoraBadgeVariant.neutral,
+      ),
     );
   }
 }
@@ -139,10 +145,13 @@ class AgoraAiBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AgoraBadge(
-      label: label,
-      icon: icon,
-      variant: AgoraBadgeVariant.gold,
+    return Semantics(
+      label: 'AI-generated element with verified provenance receipt: $label',
+      child: AgoraBadge(
+        label: label,
+        icon: icon,
+        variant: AgoraBadgeVariant.gold,
+      ),
     );
   }
 }
