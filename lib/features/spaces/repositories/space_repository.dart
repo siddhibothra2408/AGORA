@@ -28,6 +28,7 @@ abstract class SpaceRepository {
     required String uid,
     required MemberConsentState consentState,
   });
+  Future<void> updateLastReadAt({required String spaceId, required String uid});
 }
 
 class FirestoreSpaceRepository implements SpaceRepository {
@@ -165,6 +166,20 @@ class FirestoreSpaceRepository implements SpaceRepository {
       throw DataFailure('Failed to update consent state: $e');
     }
   }
+
+  @override
+  Future<void> updateLastReadAt({
+    required String spaceId,
+    required String uid,
+  }) async {
+    try {
+      await firestore.doc(FirestorePaths.spaceMember(spaceId, uid)).update({
+        'lastReadAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw DataFailure('Failed to update last read: $e');
+    }
+  }
 }
 
 final spaceRepositoryProvider = Provider<SpaceRepository>((ref) {
@@ -194,3 +209,12 @@ final spaceMembersProvider = StreamProvider.family<List<SpaceMember>, String>((
   final repo = ref.watch(spaceRepositoryProvider);
   return repo.watchMembers(spaceId);
 });
+
+final spaceMemberProvider =
+    StreamProvider.family<SpaceMember?, ({String spaceId, String uid})>((
+      ref,
+      arg,
+    ) {
+      final repo = ref.watch(spaceRepositoryProvider);
+      return repo.watchMember(arg.spaceId, arg.uid);
+    });

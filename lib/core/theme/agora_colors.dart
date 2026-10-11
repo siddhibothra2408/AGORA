@@ -56,4 +56,9 @@ abstract final class AgoraColors {
   static const Color withhold = Color(0xFF6C3483);
   static const Color withholdContainer = Color(0xFFF4ECF7);
   static const Color withholdBorder = Color(0xFFD7BDE2);
+
+  // Terracotta (Overdue indicator, non-alarmist warm ceramic tone)
+  static const Color terracotta = Color(0xFFC85A32);
+  static const Color terracottaContainer = Color(0xFFF9ECE6);
+  static const Color terracottaBorder = Color(0xFFE8B4A2);
 }

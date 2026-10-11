@@ -9,8 +9,13 @@ import '../../../core/theme/agora_spacing.dart';
 import '../../../core/theme/agora_typography.dart';
 import '../../../shared/design_system/agora_badge.dart';
 import '../../../shared/design_system/agora_states.dart';
+import '../../handoffs/repositories/handoff_repository.dart';
+import '../../items/repositories/item_repository.dart';
 import '../../profile/models/user_profile.dart';
 import '../../profile/repositories/profile_repository.dart';
+import '../../spaces/models/catch_up_summary.dart';
+import '../../spaces/repositories/space_repository.dart';
+import '../../spaces/widgets/catch_up_card.dart';
 import '../models/message.dart';
 import '../repositories/chat_repository.dart';
 
@@ -27,6 +32,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _textController = TextEditingController();
   bool _withholdForNext = false;
   bool _isSending = false;
+  bool _catchUpDismissed = false;
+
+  // Snapshot of lastReadAt captured when entering the space
+  DateTime? _initialLastReadAt;
+  bool _hasCapturedSnapshot = false;
+  static DateTime? _lastRecordedTime;
 
   @override
   void initState() {
@@ -40,8 +51,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    _recordLastReadAt();
     _textController.dispose();
     super.dispose();
+  }
+
+  void _recordLastReadAt() {
+    final uid = ref.read(currentUserIdProvider);
+    if (uid == null || uid.isEmpty) return;
+
+    // Throttled: only write if at least 10s elapsed since last write
+    final now = DateTime.now();
+    if (_lastRecordedTime != null &&
+        now.difference(_lastRecordedTime!).inSeconds < 10) {
+      return;
+    }
+    _lastRecordedTime = now;
+
+    // Silent and non-blocking
+    try {
+      ref
+          .read(spaceRepositoryProvider)
+          .updateLastReadAt(spaceId: widget.spaceId, uid: uid)
+          .catchError((_) {});
+    } catch (_) {
+      // Ignored non-blocking
+    }
   }
 
   Future<void> _handleSendMessage() async {
@@ -110,6 +145,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget build(BuildContext context) {
     final messagesAsync = ref.watch(spaceMessagesProvider(widget.spaceId));
     final currentUid = ref.watch(currentUserIdProvider) ?? '';
+    final memberAsync = ref.watch(
+      spaceMemberProvider((spaceId: widget.spaceId, uid: currentUid)),
+    );
+    final itemsAsync = ref.watch(
+      spaceItemsProvider((spaceId: widget.spaceId, type: null)),
+    );
+    final handoffsAsync = ref.watch(spaceHandoffsProvider(widget.spaceId));
+
+    // Capture initial lastReadAt snapshot on first load
+    if (!_hasCapturedSnapshot && memberAsync.hasValue) {
+      _initialLastReadAt = memberAsync.value?.lastReadAt;
+      _hasCapturedSnapshot = true;
+    }
+
+    // Calculate CatchUpSummary
+    CatchUpSummary? catchUpSummary;
+    if (!_catchUpDismissed &&
+        _hasCapturedSnapshot &&
+        _initialLastReadAt != null) {
+      catchUpSummary = CatchUpSummary.calculate(
+        lastReadAt: _initialLastReadAt,
+        messages: messagesAsync.value ?? [],
+        items: itemsAsync.value ?? [],
+        handoffs: handoffsAsync.value ?? [],
+        currentUserId: currentUid,
+      );
+    }
 
     return Column(
       children: [
@@ -121,6 +183,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           textColor: AgoraColors.navy,
           borderColor: AgoraColors.surfaceBorder,
         ),
+
+        // Catch-Up Card (Deterministic, Blue not Gold, Dismissible)
+        if (catchUpSummary != null && catchUpSummary.shouldDisplay)
+          CatchUpCard(
+            spaceId: widget.spaceId,
+            summary: catchUpSummary,
+            onDismiss: () => setState(() => _catchUpDismissed = true),
+          ),
 
         // Message Feed
         Expanded(

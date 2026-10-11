@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
+import '../../../core/services/firebase_providers.dart';
 import '../../../core/theme/agora_colors.dart';
 import '../../../core/theme/agora_spacing.dart';
 import '../../../core/theme/agora_typography.dart';
 import '../../../shared/design_system/agora_badge.dart';
 import '../../../shared/design_system/agora_card.dart';
 import '../../../shared/design_system/agora_states.dart';
+import '../../chat/repositories/chat_repository.dart';
+import '../../handoffs/repositories/handoff_repository.dart';
+import '../../spaces/models/catch_up_summary.dart';
+import '../../spaces/repositories/space_repository.dart';
+import '../../spaces/widgets/catch_up_card.dart';
 import '../models/item.dart';
 import '../repositories/item_repository.dart';
 
@@ -21,15 +28,54 @@ class BoardScreen extends ConsumerStatefulWidget {
 
 class _BoardScreenState extends ConsumerState<BoardScreen> {
   ItemType? _selectedFilter;
+  bool _catchUpDismissed = false;
+  DateTime? _initialLastReadAt;
+  bool _hasCapturedSnapshot = false;
 
   @override
   Widget build(BuildContext context) {
     final itemsAsync = ref.watch(
       spaceItemsProvider((spaceId: widget.spaceId, type: _selectedFilter)),
     );
+    final allItemsAsync = ref.watch(
+      spaceItemsProvider((spaceId: widget.spaceId, type: null)),
+    );
+    final messagesAsync = ref.watch(spaceMessagesProvider(widget.spaceId));
+    final handoffsAsync = ref.watch(spaceHandoffsProvider(widget.spaceId));
+    final currentUid = ref.watch(currentUserIdProvider) ?? '';
+    final memberAsync = ref.watch(
+      spaceMemberProvider((spaceId: widget.spaceId, uid: currentUid)),
+    );
+
+    // Capture initial lastReadAt snapshot on first load
+    if (!_hasCapturedSnapshot && memberAsync.hasValue) {
+      _initialLastReadAt = memberAsync.value?.lastReadAt;
+      _hasCapturedSnapshot = true;
+    }
+
+    // Calculate CatchUpSummary
+    CatchUpSummary? catchUpSummary;
+    if (!_catchUpDismissed &&
+        _hasCapturedSnapshot &&
+        _initialLastReadAt != null) {
+      catchUpSummary = CatchUpSummary.calculate(
+        lastReadAt: _initialLastReadAt,
+        messages: messagesAsync.value ?? [],
+        items: allItemsAsync.value ?? [],
+        handoffs: handoffsAsync.value ?? [],
+        currentUserId: currentUid,
+      );
+    }
 
     return Column(
       children: [
+        // Catch-Up Card (Deterministic, Blue not Gold, Dismissible)
+        if (catchUpSummary != null && catchUpSummary.shouldDisplay)
+          CatchUpCard(
+            spaceId: widget.spaceId,
+            summary: catchUpSummary,
+            onDismiss: () => setState(() => _catchUpDismissed = true),
+          ),
         // Filter Strip
         Container(
           color: AgoraColors.surface,
@@ -226,6 +272,107 @@ class _BoardItemCard extends StatelessWidget {
           if (item.description.isNotEmpty) ...[
             const SizedBox(height: AgoraSpacing.xs),
             Text(item.description, style: AgoraTypography.bodyMedium),
+          ],
+          if (item.dueDate != null ||
+              item.assignmentStatus == AssignmentStatus.proposed) ...[
+            const SizedBox(height: AgoraSpacing.sm),
+            Wrap(
+              spacing: AgoraSpacing.xs,
+              children: [
+                if (item.dueDate != null) ...[
+                  Builder(
+                    builder: (context) {
+                      final isOverdue =
+                          !isDone && item.dueDate!.isBefore(DateTime.now());
+                      final dateStr = DateFormat('MMM d').format(item.dueDate!);
+                      if (isOverdue) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AgoraColors.terracottaContainer,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: AgoraColors.terracottaBorder,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.warning_amber_rounded,
+                                size: 13,
+                                color: AgoraColors.terracotta,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'OVERDUE · $dateStr',
+                                style: AgoraTypography.labelSmall.copyWith(
+                                  color: AgoraColors.terracotta,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AgoraColors.surfaceContainer,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: AgoraColors.surfaceBorder),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.event_outlined,
+                              size: 13,
+                              color: AgoraColors.navySubtle,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Due $dateStr',
+                              style: AgoraTypography.labelSmall.copyWith(
+                                color: AgoraColors.navySubtle,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+                if (item.assignmentStatus == AssignmentStatus.proposed)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AgoraColors.aegeanContainer,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: AgoraColors.aegeanContainerBorder,
+                      ),
+                    ),
+                    child: Text(
+                      'PROPOSED ASSIGNMENT',
+                      style: AgoraTypography.labelSmall.copyWith(
+                        color: AgoraColors.aegeanDark,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ],
           if (item.sourceMessageIds.isNotEmpty) ...[
             const SizedBox(height: AgoraSpacing.md),

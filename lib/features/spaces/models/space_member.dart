@@ -31,6 +31,7 @@ class SpaceMember {
     this.role = SpaceMemberRole.member,
     this.consentState = MemberConsentState.consented,
     required this.joinedAt,
+    this.lastReadAt,
   });
 
   final String uid;
@@ -41,6 +42,7 @@ class SpaceMember {
   final SpaceMemberRole role;
   final MemberConsentState consentState;
   final DateTime joinedAt;
+  final DateTime? lastReadAt;
 
   bool get isOwner => role == SpaceMemberRole.owner;
   bool get isAdmin => role == SpaceMemberRole.admin || isOwner;
@@ -55,6 +57,7 @@ class SpaceMember {
     SpaceMemberRole? role,
     MemberConsentState? consentState,
     DateTime? joinedAt,
+    DateTime? lastReadAt,
   }) {
     return SpaceMember(
       uid: uid ?? this.uid,
@@ -65,6 +68,7 @@ class SpaceMember {
       role: role ?? this.role,
       consentState: consentState ?? this.consentState,
       joinedAt: joinedAt ?? this.joinedAt,
+      lastReadAt: lastReadAt ?? this.lastReadAt,
     );
   }
 
@@ -78,6 +82,9 @@ class SpaceMember {
       'role': role.value,
       'consentState': consentState.value,
       'joinedAt': DateParser.toFirestore(joinedAt),
+      'lastReadAt': lastReadAt != null
+          ? DateParser.toFirestore(lastReadAt!)
+          : null,
     };
   }
 
@@ -97,6 +104,9 @@ class SpaceMember {
         map['consentState'] as String?,
       ),
       joinedAt: DateParser.parse(map['joinedAt']),
+      lastReadAt: map['lastReadAt'] != null
+          ? DateParser.parse(map['lastReadAt'])
+          : null,
     );
   }
 
@@ -108,9 +118,14 @@ class SpaceMember {
           uid == other.uid &&
           spaceId == other.spaceId &&
           role == other.role &&
-          consentState == other.consentState;
+          consentState == other.consentState &&
+          lastReadAt == other.lastReadAt;
 
   @override
   int get hashCode =>
-      uid.hashCode ^ spaceId.hashCode ^ role.hashCode ^ consentState.hashCode;
+      uid.hashCode ^
+      spaceId.hashCode ^
+      role.hashCode ^
+      consentState.hashCode ^
+      (lastReadAt?.hashCode ?? 0);
 }

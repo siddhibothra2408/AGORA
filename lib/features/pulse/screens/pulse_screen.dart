@@ -9,8 +9,11 @@ import '../../../shared/design_system/agora_badge.dart';
 import '../../../shared/design_system/agora_card.dart';
 import '../../../shared/design_system/agora_states.dart';
 import '../../handoffs/repositories/handoff_repository.dart';
+import '../../items/repositories/item_repository.dart';
 import '../../spaces/models/ai_consent_state.dart';
 import '../../spaces/repositories/space_repository.dart';
+import '../models/pulse_metrics.dart';
+import '../widgets/pulse_sparkline.dart';
 
 class PulseScreen extends ConsumerWidget {
   const PulseScreen({super.key, required this.spaceId});
@@ -22,6 +25,9 @@ class PulseScreen extends ConsumerWidget {
     final membersAsync = ref.watch(spaceMembersProvider(spaceId));
     final handoffsAsync = ref.watch(spaceHandoffsProvider(spaceId));
     final spaceAsync = ref.watch(currentSpaceProvider(spaceId));
+    final itemsAsync = ref.watch(
+      spaceItemsProvider((spaceId: spaceId, type: null)),
+    );
 
     return ListView(
       padding: const EdgeInsets.all(AgoraSpacing.lg),
@@ -60,6 +66,187 @@ class PulseScreen extends ConsumerWidget {
         ),
 
         const SizedBox(height: AgoraSpacing.lg),
+
+        // Deterministic Team Workload & Activity Metrics
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Space Pulse', style: AgoraTypography.headlineMedium),
+            const AgoraBadge(
+              label: 'DETERMINISTIC',
+              icon: Icons.analytics_outlined,
+              variant: AgoraBadgeVariant.aegean,
+            ),
+          ],
+        ),
+        const SizedBox(height: AgoraSpacing.xs),
+        Text(
+          'Computed directly from human-approved board items and activity logs. Zero AI extrapolation.',
+          style: AgoraTypography.bodySmall,
+        ),
+        const SizedBox(height: AgoraSpacing.sm),
+
+        itemsAsync.when(
+          loading: () =>
+              const AgoraLoadingIndicator(message: 'Calculating pulse...'),
+          error: (err, _) => AgoraErrorView(
+            title: 'Could not calculate pulse',
+            message: err.toString(),
+            onRetry: () => ref.invalidate(
+              spaceItemsProvider((spaceId: spaceId, type: null)),
+            ),
+          ),
+          data: (items) {
+            final members = membersAsync.value ?? [];
+            final metrics = PulseMetrics.calculate(
+              items: items,
+              members: members,
+              now: DateTime.now(),
+            );
+
+            return Column(
+              children: [
+                // Top stat cards
+                Row(
+                  children: [
+                    Expanded(
+                      child: _MetricCard(
+                        title: 'Open Tasks',
+                        value: '${metrics.openTasksCount}',
+                        subtitle: '${metrics.doneTasksCount} done',
+                        accentColor: AgoraColors.navyDark,
+                      ),
+                    ),
+                    const SizedBox(width: AgoraSpacing.sm),
+                    Expanded(
+                      child: _MetricCard(
+                        title: 'Overdue',
+                        value: '${metrics.overdueCount}',
+                        subtitle: metrics.overdueCount > 0
+                            ? 'Requires attention'
+                            : 'On schedule',
+                        accentColor: metrics.overdueCount > 0
+                            ? AgoraColors.terracotta
+                            : AgoraColors.success,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AgoraSpacing.sm),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _MetricCard(
+                        title: 'Stale (>7d)',
+                        value: '${metrics.staleTasksCount}',
+                        subtitle: 'No updates in 7 days',
+                        accentColor: metrics.staleTasksCount > 0
+                            ? AgoraColors.warning
+                            : AgoraColors.navySubtle,
+                      ),
+                    ),
+                    const SizedBox(width: AgoraSpacing.sm),
+                    Expanded(
+                      child: _MetricCard(
+                        title: 'Open Questions',
+                        value: '${metrics.questionsOpenOver3DaysCount}',
+                        subtitle: 'Waiting > 3 days',
+                        accentColor: metrics.questionsOpenOver3DaysCount > 0
+                            ? AgoraColors.warning
+                            : AgoraColors.navySubtle,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AgoraSpacing.sm),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _MetricCard(
+                        title: 'Decisions This Week',
+                        value: '${metrics.decisionsThisWeekCount}',
+                        subtitle: 'Recorded in Board',
+                        accentColor: AgoraColors.aegean,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: AgoraSpacing.md),
+
+                // 14-day completion sparkline
+                AgoraCard(
+                  padding: const EdgeInsets.all(AgoraSpacing.lg),
+                  child: PulseSparkline(data: metrics.sparkline14Days),
+                ),
+
+                const SizedBox(height: AgoraSpacing.md),
+
+                // Per-member open load
+                if (members.isNotEmpty)
+                  AgoraCard(
+                    padding: const EdgeInsets.all(AgoraSpacing.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Open Tasks Distribution',
+                          style: AgoraTypography.titleMedium,
+                        ),
+                        const SizedBox(height: AgoraSpacing.xs),
+                        Text(
+                          'Open tasks assigned per member:',
+                          style: AgoraTypography.bodySmall,
+                        ),
+                        const SizedBox(height: AgoraSpacing.sm),
+                        ...members.map((member) {
+                          final count =
+                              metrics.perMemberOpenLoad[member.uid] ?? 0;
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4.0),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 12,
+                                  backgroundColor: AgoraColors.aegeanContainer,
+                                  child: Text(
+                                    member.displayName.isNotEmpty
+                                        ? member.displayName[0].toUpperCase()
+                                        : '?',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: AgoraColors.aegeanDark,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: AgoraSpacing.xs),
+                                Expanded(
+                                  child: Text(
+                                    member.displayName,
+                                    style: AgoraTypography.bodyMedium,
+                                  ),
+                                ),
+                                AgoraBadge(
+                                  label:
+                                      '$count ${count == 1 ? 'task' : 'tasks'}',
+                                  variant: count > 3
+                                      ? AgoraBadgeVariant.warning
+                                      : AgoraBadgeVariant.neutral,
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+
+        const SizedBox(height: AgoraSpacing.xl),
 
         // Member Consent Statistics
         Text('Member Consent Posture', style: AgoraTypography.headlineMedium),
@@ -224,6 +411,48 @@ class PulseScreen extends ConsumerWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.accentColor,
+  });
+
+  final String title;
+  final String value;
+  final String subtitle;
+  final Color accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return AgoraCard(
+      padding: const EdgeInsets.all(AgoraSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: AgoraTypography.labelSmall),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: AgoraTypography.displayLarge.copyWith(
+              color: accentColor,
+              fontSize: 26,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: AgoraTypography.bodySmall.copyWith(fontSize: 11),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 }

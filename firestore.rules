@@ -60,8 +60,9 @@ service cloud.firestore {
       match /members/{uid} {
         allow read: if isSpaceMember(spaceId);
         allow create: if isUser(uid) || isSpaceAdminOrOwner(spaceId);
-        // Members can only update their own consentState; role changes require admin/owner
+        // Members can only update their own consentState or lastReadAt; role changes require admin/owner
         allow update: if (isUser(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['consentState']))
+                      || (isUser(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastReadAt']) && request.resource.data.lastReadAt == request.time)
                       || isSpaceAdminOrOwner(spaceId);
         allow delete: if isUser(uid) || isSpaceAdminOrOwner(spaceId);
       }

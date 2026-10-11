@@ -36,6 +36,22 @@ extension ItemStatusExtension on ItemStatus {
   }
 }
 
+enum AssignmentStatus { proposed, accepted, declined }
+
+extension AssignmentStatusExtension on AssignmentStatus {
+  String get value => switch (this) {
+    AssignmentStatus.proposed => 'proposed',
+    AssignmentStatus.accepted => 'accepted',
+    AssignmentStatus.declined => 'declined',
+  };
+
+  static AssignmentStatus fromString(String? val) {
+    if (val == 'proposed') return AssignmentStatus.proposed;
+    if (val == 'declined') return AssignmentStatus.declined;
+    return AssignmentStatus.accepted;
+  }
+}
+
 /// Board Item Model (stored at `spaces/{spaceId}/items/{itemId}`)
 ///
 /// Implements core provenance invariant:
@@ -54,6 +70,9 @@ class Item {
     required this.sourceMessageIds,
     required this.approvedByUid,
     this.assigneeUid,
+    this.ownerUid,
+    this.dueDate,
+    this.assignmentStatus = AssignmentStatus.accepted,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -68,8 +87,14 @@ class Item {
   final List<String> sourceMessageIds;
   final String approvedByUid;
   final String? assigneeUid;
+  final String? ownerUid;
+  final DateTime? dueDate;
+  final AssignmentStatus assignmentStatus;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// Effective user owning or assigned to this item
+  String? get effectiveOwnerUid => ownerUid ?? assigneeUid;
 
   bool get isTask => type == ItemType.task;
   bool get isDecision => type == ItemType.decision;
@@ -86,6 +111,9 @@ class Item {
     List<String>? sourceMessageIds,
     String? approvedByUid,
     String? assigneeUid,
+    String? ownerUid,
+    DateTime? dueDate,
+    AssignmentStatus? assignmentStatus,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -100,6 +128,9 @@ class Item {
       sourceMessageIds: sourceMessageIds ?? this.sourceMessageIds,
       approvedByUid: approvedByUid ?? this.approvedByUid,
       assigneeUid: assigneeUid ?? this.assigneeUid,
+      ownerUid: ownerUid ?? this.ownerUid,
+      dueDate: dueDate ?? this.dueDate,
+      assignmentStatus: assignmentStatus ?? this.assignmentStatus,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -117,6 +148,9 @@ class Item {
       'sourceMessageIds': sourceMessageIds,
       'approvedByUid': approvedByUid,
       'assigneeUid': assigneeUid,
+      'ownerUid': ownerUid ?? assigneeUid,
+      'dueDate': dueDate != null ? DateParser.toFirestore(dueDate!) : null,
+      'assignmentStatus': assignmentStatus.value,
       'createdAt': DateParser.toFirestore(createdAt),
       'updatedAt': DateParser.toFirestore(updatedAt),
     };
@@ -136,6 +170,11 @@ class Item {
       ),
       approvedByUid: map['approvedByUid'] as String? ?? '',
       assigneeUid: map['assigneeUid'] as String?,
+      ownerUid: map['ownerUid'] as String? ?? map['assigneeUid'] as String?,
+      dueDate: map['dueDate'] != null ? DateParser.parse(map['dueDate']) : null,
+      assignmentStatus: AssignmentStatusExtension.fromString(
+        map['assignmentStatus'] as String?,
+      ),
       createdAt: DateParser.parse(map['createdAt']),
       updatedAt: DateParser.parse(map['updatedAt']),
     );
@@ -151,7 +190,10 @@ class Item {
           type == other.type &&
           title == other.title &&
           status == other.status &&
-          sourceHandoffId == other.sourceHandoffId;
+          sourceHandoffId == other.sourceHandoffId &&
+          ownerUid == other.ownerUid &&
+          dueDate == other.dueDate &&
+          assignmentStatus == other.assignmentStatus;
 
   @override
   int get hashCode =>
@@ -160,5 +202,8 @@ class Item {
       type.hashCode ^
       title.hashCode ^
       status.hashCode ^
-      sourceHandoffId.hashCode;
+      sourceHandoffId.hashCode ^
+      (ownerUid?.hashCode ?? 0) ^
+      (dueDate?.hashCode ?? 0) ^
+      assignmentStatus.hashCode;
 }

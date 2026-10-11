@@ -15,6 +15,11 @@ abstract class ItemRepository {
     String itemId,
     ItemStatus status,
   );
+  Future<void> updateAssignmentStatus(
+    String spaceId,
+    String itemId,
+    AssignmentStatus status,
+  );
 }
 
 class FirestoreItemRepository implements ItemRepository {
@@ -80,6 +85,22 @@ class FirestoreItemRepository implements ItemRepository {
       });
     } catch (e) {
       throw DataFailure('Failed to update item status: $e');
+    }
+  }
+
+  @override
+  Future<void> updateAssignmentStatus(
+    String spaceId,
+    String itemId,
+    AssignmentStatus status,
+  ) async {
+    try {
+      await firestore.doc(FirestorePaths.spaceItem(spaceId, itemId)).update({
+        'assignmentStatus': status.value,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw DataFailure('Failed to update assignment status: $e');
     }
   }
 }
