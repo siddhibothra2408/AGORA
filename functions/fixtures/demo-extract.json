@@ -1,0 +1,55 @@
+{
+  "version": "1.0",
+  "provider": "fixture",
+  "providerLabel": "Demo fixture (offline mode)",
+  "proposals": [
+    {
+      "type": "decision",
+      "title": "Use HC-SR04 ultrasonic sensors for bin fill detection",
+      "description": "Standardized on ultrasonic distance sensing after testing confirmed optical infrared sensors fail on dark plastic liners.",
+      "anchorContains": "standardize on HC-SR04 ultrasonic sensor",
+      "quote": "Let's standardize on HC-SR04 ultrasonic sensor; optical fails with black trash bags.",
+      "confidence": 0.98
+    },
+    {
+      "type": "task",
+      "title": "Send project specification draft",
+      "description": "Complete and circulate the draft system requirements and bill of materials to the team.",
+      "anchorContains": "I'll send the draft by Friday",
+      "quote": "I'll send the draft by Friday so we can review before the weekend.",
+      "dueDate": "2026-10-16T17:00:00.000Z",
+      "suggestedAssigneeUid": "user_lena",
+      "suggestedAssigneeName": "Lena Kim",
+      "confidence": 0.96
+    },
+    {
+      "type": "task",
+      "title": "Order ultrasonic sensors and mounting brackets",
+      "description": "Place the component purchase order for 4x HC-SR04 units and acrylic mount plates.",
+      "anchorContains": "please order the ultrasonic sensors and brackets by Oct 14",
+      "quote": "Ravi, please order the ultrasonic sensors and brackets by Oct 14 so shipping arrives in time.",
+      "dueDate": "2026-10-14T17:00:00.000Z",
+      "suggestedAssigneeUid": "user_ravi",
+      "suggestedAssigneeName": "Ravi Patel",
+      "confidence": 0.97
+    },
+    {
+      "type": "task",
+      "title": "Measure bin dimensions for custom mounting bracket",
+      "description": "Take caliper measurements of the 40-liter university bin rim to prepare 3D print model.",
+      "anchorContains": "measure the 40-liter bin lip dimensions",
+      "quote": "We need someone to measure the 40-liter bin lip dimensions today.",
+      "suggestedAssigneeUid": "user_ravi",
+      "suggestedAssigneeName": "Ravi Patel",
+      "confidence": 0.91
+    },
+    {
+      "type": "question",
+      "title": "Who currently holds the lab 3D printer access card?",
+      "description": "Unanswered question regarding physical access to the engineering makerspace.",
+      "anchorContains": "who currently has the 3D printer lab access card",
+      "quote": "Does anyone know who currently has the 3D printer lab access card? Still looking for it.",
+      "confidence": 0.94
+    }
+  ]
+}
