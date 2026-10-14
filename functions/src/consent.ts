@@ -65,10 +65,8 @@ export type HandoffEvaluationReason =
   | "included-own"
   | "included-consented"
   | "excluded-author-not-allowed"
-  | "excluded-withheld"
   | "excluded-deleted"
-  | "excluded-unavailable"
-  | "excluded-invalid";
+  | "excluded-unavailable";
 
 export const AI_POLICY_RANK: Record<AiHandoffPolicy, number> = {
   off: 0,

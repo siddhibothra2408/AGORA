@@ -46,17 +46,50 @@ export interface ProposalOutputItem {
   confidence: number;
 }
 
+const ID_REGEX = /^[A-Za-z0-9_-]{1,64}$/;
+const VALID_PURPOSES = ["extract", "actions", "summarize"];
+
 export async function authorizeAndBuild(
   requesterUid: string,
   spaceId: string,
   messageIds: string[],
-  purpose: string = "extract"
+  purpose: string = "extract",
+  customInstruction?: string
 ) {
-  // 1. Validate messageIds (1-50 unique IDs)
-  const uniqueIds = Array.from(new Set(messageIds)).filter((id) => typeof id === "string" && id.length > 0);
+  // 1. Validate inputs
+  if (!requesterUid || typeof requesterUid !== "string") {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+
+  if (!spaceId || !ID_REGEX.test(spaceId)) {
+    throw new HttpsError("invalid-argument", "invalid-id: spaceId does not match format.");
+  }
+
+  if (!Array.isArray(messageIds)) {
+    throw new HttpsError("invalid-argument", "messageIds must be an array.");
+  }
+
+  for (const id of messageIds) {
+    if (typeof id !== "string" || !ID_REGEX.test(id)) {
+      throw new HttpsError("invalid-argument", "invalid-id: messageId does not match format.");
+    }
+  }
+
+  const uniqueIds = Array.from(new Set(messageIds)).filter((id) => Boolean(id));
   if (uniqueIds.length === 0 || uniqueIds.length > 50) {
     throw new HttpsError("invalid-argument", "Select between 1 and 50 messages.");
   }
+
+  if (!VALID_PURPOSES.includes(purpose)) {
+    throw new HttpsError(
+      "invalid-argument",
+      "invalid-purpose: purpose must be 'extract', 'actions', or 'summarize'."
+    );
+  }
+
+  const sanitizedInstruction = customInstruction
+    ? customInstruction.replace(/[\x00-\x1F\x7F]/g, "").trim().substring(0, 200)
+    : undefined;
 
   // 2. Load Space
   const spaceSnap = await db.doc(`spaces/${spaceId}`).get();
@@ -68,32 +101,34 @@ export async function authorizeAndBuild(
   // 3. Check membership & policy
   const requesterMemberSnap = await db.doc(`spaces/${spaceId}/members/${requesterUid}`).get();
   if (!requesterMemberSnap.exists) {
-    throw new HttpsError("permission-denied", "You must be a member of this space.");
+    throw new HttpsError("permission-denied", "not-a-member: You must be a member of this space.");
   }
   const requesterMember = requesterMemberSnap.data() as SpaceMemberData;
 
   const policy = space.aiPolicy?.handoff || "anyone";
   if (!policyPermitsHandoff(space, requesterMember.role)) {
     if (policy === "off") {
-      throw new HttpsError("failed-precondition", "AI handoffs are turned off for this space (policy-off).");
+      throw new HttpsError("failed-precondition", "policy-off: AI handoffs are turned off for this space.");
     }
-    throw new HttpsError("permission-denied", "Only space admins may execute AI handoffs (admins-only).");
+    throw new HttpsError("permission-denied", "admins-only: Only space admins may execute AI handoffs.");
   }
 
-  // 4. Load messages from this Space
+  // 4. Load messages from this Space (and detect missing/cross-space IDs)
   const messageSnaps = await Promise.all(
     uniqueIds.map((id) => db.doc(`spaces/${spaceId}/messages/${id}`).get())
   );
 
-  const rawMessages: MessageData[] = [];
+  const rawMessagesMap = new Map<string, MessageData>();
   for (const snap of messageSnaps) {
     if (snap.exists) {
-      rawMessages.push({ ...snap.data(), id: snap.id } as MessageData);
+      rawMessagesMap.set(snap.id, { ...snap.data(), id: snap.id } as MessageData);
     }
   }
 
   // 5. Load authors for consent evaluation
-  const authorUids = Array.from(new Set(rawMessages.map((m) => m.senderId)));
+  const authorUids = Array.from(
+    new Set(Array.from(rawMessagesMap.values()).map((m) => m.senderId))
+  );
   const authorSnaps = await Promise.all(
     authorUids.map((uid) => db.doc(`spaces/${spaceId}/members/${uid}`).get())
   );
@@ -104,16 +139,28 @@ export async function authorizeAndBuild(
     }
   }
 
-  // 6. Evaluate each message
+  // 6. Evaluate each unique message in requested order
   const evaluationItems: Array<{
     messageId: string;
     canInclude: boolean;
     reason: HandoffEvaluationReason;
     authorUid: string;
-    message: MessageData;
+    message?: MessageData;
   }> = [];
 
-  for (const msg of rawMessages) {
+  for (const id of uniqueIds) {
+    const msg = rawMessagesMap.get(id);
+    if (!msg) {
+      // Message missing in this Space -> unavailable (cross-space or non-existent)
+      evaluationItems.push({
+        messageId: id,
+        canInclude: false,
+        reason: "excluded-unavailable",
+        authorUid: "",
+      });
+      continue;
+    }
+
     const authorMember = authorMap.get(msg.senderId);
     const evalRes = evaluateMessageForHandoff({
       message: msg,
@@ -131,14 +178,16 @@ export async function authorizeAndBuild(
   }
 
   // Filter included messages and sort by createdAt ascending
-  const includedItems = evaluationItems.filter((e) => e.canInclude);
+  const includedItems = evaluationItems.filter((e): e is typeof e & { message: MessageData } =>
+    Boolean(e.canInclude && e.message)
+  );
   includedItems.sort((a, b) => {
     const tA = a.message.createdAt?.toDate ? a.message.createdAt.toDate().getTime() : 0;
     const tB = b.message.createdAt?.toDate ? b.message.createdAt.toDate().getTime() : 0;
     return tA - tB;
   });
 
-  // Assign labels: "Member A", "Member B", etc.
+  // Assign deterministic labels: "Member A", "Member B", etc. by first appearance in sorted messages
   const uidToLabel = new Map<string, string>();
   const labelToUid = new Map<string, string>();
   let nextLabelCode = 65; // 'A'
@@ -171,14 +220,20 @@ export async function authorizeAndBuild(
     });
   }
 
-  const payloadHash = computePayloadHash(payload, space.charterVersion, policy, purpose);
+  const payloadHash = computePayloadHash(
+    payload,
+    space.charterVersion,
+    policy,
+    purpose,
+    sanitizedInstruction
+  );
 
   const counts = {
     total: uniqueIds.length,
     included: includedItems.length,
-    excludedWithheld: evaluationItems.filter((e) => e.reason === "excluded-withheld").length,
+    excludedAuthorNotAllowed: evaluationItems.filter((e) => e.reason === "excluded-author-not-allowed").length,
     excludedDeleted: evaluationItems.filter((e) => e.reason === "excluded-deleted").length,
-    excludedInvalid: evaluationItems.filter((e) => e.reason === "excluded-invalid").length,
+    excludedUnavailable: evaluationItems.filter((e) => e.reason === "excluded-unavailable").length,
   };
 
   const items = evaluationItems.map((e) => ({
@@ -197,18 +252,20 @@ export async function authorizeAndBuild(
     payloadHash,
     tokenToMessageId,
     labelToUid,
+    customInstruction: sanitizedInstruction,
   };
 }
 
 export async function handlePreviewHandoff(
   requesterUid: string,
-  data: { spaceId: string; messageIds: string[]; purpose?: string }
+  data: { spaceId: string; messageIds: string[]; purpose?: string; customInstruction?: string }
 ) {
   const result = await authorizeAndBuild(
     requesterUid,
     data.spaceId,
     data.messageIds,
-    data.purpose || "extract"
+    data.purpose || "extract",
+    data.customInstruction
   );
 
   return {
@@ -280,7 +337,8 @@ function validateProposalItem(
 
 async function callProvider(
   payload: HandoffPayloadItem[],
-  purpose: string
+  purpose: string,
+  customInstruction?: string
 ): Promise<{ items: ProposalOutputItem[]; provider: string; model: string }> {
   const useFixture = process.env.FUNCTIONS_EMULATOR === "true" && process.env.AI_PROVIDER === "fixture";
 
@@ -348,6 +406,7 @@ async function callProvider(
     todayUtc: new Date().toISOString().split("T")[0],
     labels: Array.from(new Set(payload.map((p) => p.authorLabel))),
     purpose,
+    customInstruction: customInstruction || undefined,
   });
 
   const response = await ai.models.generateContent({
@@ -381,12 +440,13 @@ export async function handleRunHandoff(
     spaceId: string;
     messageIds: string[];
     purpose?: string;
+    customInstruction?: string;
     requestId: string;
     expectedPayloadHash: string;
     expectedCharterVersion: number;
   }
 ) {
-  const { spaceId, messageIds, requestId, expectedPayloadHash, expectedCharterVersion } = data;
+  const { spaceId, messageIds, requestId, expectedPayloadHash, expectedCharterVersion, customInstruction } = data;
   const purpose = data.purpose || "extract";
 
   if (!requestId || requestId.length > 64) {
@@ -422,7 +482,7 @@ export async function handleRunHandoff(
   });
 
   // 2. Authorize and build
-  const built = await authorizeAndBuild(requesterUid, spaceId, messageIds, purpose);
+  const built = await authorizeAndBuild(requesterUid, spaceId, messageIds, purpose, customInstruction);
 
   if (built.charterVersion !== expectedCharterVersion) {
     await handoffRef.update({ status: "blocked", errorCode: "charter-changed" });
@@ -440,7 +500,7 @@ export async function handleRunHandoff(
   }
 
   // 3. Re-verify immediately before dispatch
-  const recheck = await authorizeAndBuild(requesterUid, spaceId, messageIds, purpose);
+  const recheck = await authorizeAndBuild(requesterUid, spaceId, messageIds, purpose, customInstruction);
   if (recheck.payloadHash !== built.payloadHash) {
     await handoffRef.update({ status: "blocked", errorCode: "consent-changed" });
     throw new HttpsError("failed-precondition", "consent-changed: Consent changed prior to dispatch.");
@@ -450,7 +510,7 @@ export async function handleRunHandoff(
   let providerResult: { items: ProposalOutputItem[]; provider: string; model: string };
   try {
     await handoffRef.update({ dispatched: true });
-    providerResult = await callProvider(built.payload, purpose);
+    providerResult = await callProvider(built.payload, purpose, customInstruction);
   } catch (err: any) {
     await handoffRef.update({ status: "error", errorCode: err.message || "ai-error" });
     throw err;
@@ -486,8 +546,7 @@ export async function handleRunHandoff(
       ownerUid = built.labelToUid.get(prop.ownerLabel)!;
     }
 
-    const propRef = db.doc(`users/${requesterUid}/proposals/${propId}`);
-    batch.set(propRef, {
+    const proposalDoc = {
       id: propId,
       spaceId,
       handoffId: handoffDocId,
@@ -495,6 +554,7 @@ export async function handleRunHandoff(
       title: prop.title,
       detail: prop.detail,
       ownerUid,
+      createdForUid: requesterUid,
       volunteered: prop.volunteered || false,
       dueDate: prop.dueDate || null,
       dueNeedsConfirm: prop.dueNeedsConfirm || false,
@@ -504,7 +564,15 @@ export async function handleRunHandoff(
       provider: providerResult.provider,
       createdAt: now,
       expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 14 * 24 * 3600 * 1000)),
-    });
+    };
+
+    // User private subcollection
+    const userPropRef = db.doc(`users/${requesterUid}/proposals/${propId}`);
+    batch.set(userPropRef, proposalDoc);
+
+    // Root collection (backward compatibility with FirestorePaths.proposals)
+    const rootPropRef = db.doc(`proposals/${propId}`);
+    batch.set(rootPropRef, proposalDoc);
   }
 
   // 7. Finalize handoff record
@@ -515,9 +583,9 @@ export async function handleRunHandoff(
     policy: built.policy,
     includedMessageIds: built.payload.map((p) => built.tokenToMessageId.get(p.token)),
     excluded: {
-      withheld: built.counts.excludedWithheld,
+      authorNotAllowed: built.counts.excludedAuthorNotAllowed,
       deleted: built.counts.excludedDeleted,
-      invalid: built.counts.excludedInvalid,
+      unavailable: built.counts.excludedUnavailable,
     },
     authorCount: built.counts.included,
     provider: providerResult.provider,

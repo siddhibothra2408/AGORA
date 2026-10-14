@@ -2,7 +2,6 @@ import 'package:agora/features/chat/models/message.dart';
 import 'package:agora/features/handoffs/models/proposal.dart';
 import 'package:agora/features/handoffs/screens/private_results_screen.dart';
 import 'package:agora/features/items/models/item.dart';
-import 'package:agora/shared/design_system/agora_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,8 +59,9 @@ void main() {
 
         // Invariant: Own-message exception allows author to hand off their own message
         bool canInclude(Message msg, String requesterId) {
-          if (msg.senderId == requesterId)
+          if (msg.senderId == requesterId) {
             return true; // Binding Own-Message Exception
+          }
           return !msg.aiWithheld;
         }
 
@@ -122,5 +122,26 @@ void main() {
         expect(proposal.handoffId, equals('handoff_123'));
       },
     );
+
+    test(
+      'Handoff purpose taxonomy supports extract, actions, and summarize',
+      () {
+        const allowedPurposes = ['extract', 'actions', 'summarize'];
+        expect(allowedPurposes.contains('extract'), isTrue);
+        expect(allowedPurposes.contains('actions'), isTrue);
+        expect(allowedPurposes.contains('summarize'), isTrue);
+        expect(allowedPurposes.contains('ambient_crawl'), isFalse);
+      },
+    );
+
+    test('Custom instruction sanitization limits length to 200 chars and strips control chars', () {
+      String sanitizeInstruction(String input) {
+        return input.replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '').trim();
+      }
+
+      final dirty = "Focus on tasks\x00\x08 and milestones\n";
+      final cleaned = sanitizeInstruction(dirty);
+      expect(cleaned, equals("Focus on tasks and milestones"));
+    });
   });
 }

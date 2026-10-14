@@ -498,14 +498,19 @@ class _HandoffPreviewSheetState extends ConsumerState<HandoffPreviewSheet> {
                   ),
                   _SummaryCount(
                     label: 'Withheld',
-                    count: counts['excludedWithheld'] ?? 0,
+                    count:
+                        counts['excludedAuthorNotAllowed'] ??
+                        counts['excludedWithheld'] ??
+                        0,
                     color: AgoraColors.withhold,
                   ),
                   _SummaryCount(
                     label: 'Excluded (Other)',
                     count:
                         (counts['excludedDeleted'] ?? 0) +
-                        (counts['excludedInvalid'] ?? 0),
+                        (counts['excludedUnavailable'] ??
+                            counts['excludedInvalid'] ??
+                            0),
                     color: AgoraColors.navyMuted,
                   ),
                 ],
@@ -565,9 +570,12 @@ class _HandoffPreviewSheetState extends ConsumerState<HandoffPreviewSheet> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      reason == 'excluded-withheld'
+                      (reason == 'excluded-author-not-allowed' ||
+                              reason == 'excluded-withheld')
                           ? 'AUTHOR WITHHELD'
-                          : 'EXCLUDED',
+                          : reason == 'excluded-deleted'
+                          ? 'DELETED'
+                          : 'UNAVAILABLE',
                       style: AgoraTypography.labelSmall.copyWith(
                         color: AgoraColors.withhold,
                         fontWeight: FontWeight.w700,

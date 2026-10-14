@@ -44,7 +44,7 @@ All AI processing is strictly human-initiated. Content reaches Gemini only throu
 |---|---|---|
 | **Dart Format** | **PASS** | `dart format lib test` returned exit code 0 (62 files checked, 0 unformatted). |
 | **Flutter Analyze** | **PASS** | `flutter analyze` returned `No issues found! (ran in 19.3s)`. Zero errors, zero warnings. |
-| **Flutter Test Suite** | **PASS** | `flutter test` executed **33 tests across 6 test suites** with **0 failures**: <br>• `test/phase3_lens_handoff_test.dart` (4/4 passed)<br>• `test/rescue_golden_path_test.dart` (7/7 passed)<br>• `test/catch_up_test.dart` (3/3 passed)<br>• `test/models_test.dart` (9/9 passed)<br>• `test/pulse_metrics_test.dart` (4/4 passed)<br>• `test/widget_test.dart` (6/6 passed) |
+| **Flutter Test Suite** | **PASS** | `flutter test` executed **35 tests across 6 test suites** with **0 failures**: <br>• `test/phase3_lens_handoff_test.dart` (6/6 passed)<br>• `test/rescue_golden_path_test.dart` (7/7 passed)<br>• `test/catch_up_test.dart` (3/3 passed)<br>• `test/models_test.dart` (9/9 passed)<br>• `test/pulse_metrics_test.dart` (4/4 passed)<br>• `test/widget_test.dart` (6/6 passed) |
 | **Functions Test** | **BLOCKED** | Node.js and npm are absent on the host environment PATH. Dependent gate marked BLOCKED with fix: install Node.js v20+ and run `cd functions && npm test`. |
 | **Android Build** | **BLOCKED** | Android SDK / Java are absent on the host environment PATH. `flutter build apk --debug` outputs `[!] No Android SDK found. Try setting the ANDROID_HOME environment variable.` |
 
