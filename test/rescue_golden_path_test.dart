@@ -1,9 +1,7 @@
 import 'dart:io';
-import 'package:agora/core/theme/agora_colors.dart';
+
 import 'package:agora/features/chat/models/message.dart';
-import 'package:agora/features/handoffs/models/handoff.dart';
 import 'package:agora/features/handoffs/models/proposal.dart';
-import 'package:agora/features/items/models/item.dart';
 import 'package:agora/features/spaces/models/space.dart';
 import 'package:agora/features/spaces/screens/charter_screen.dart';
 import 'package:agora/shared/design_system/agora_badge.dart';
@@ -17,6 +15,11 @@ void main() {
     testWidgets(
       'Neither card preselected and Continue button is disabled until chosen',
       (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
         await tester.pumpWidget(
           const ProviderScope(
             child: MaterialApp(
@@ -101,9 +104,7 @@ void main() {
     });
 
     test('Proposal.fromMap handles missing fields safely', () {
-      final map = <String, dynamic>{
-        'createdAt': '2026-10-12T10:00:00Z',
-      };
+      final map = <String, dynamic>{'createdAt': '2026-10-12T10:00:00Z'};
       final prop = Proposal.fromMap(map, 'prop_1');
       expect(prop.id, equals('prop_1'));
       expect(prop.isPending, isTrue);
@@ -158,7 +159,8 @@ void main() {
         expect(
           content.contains('GEMINI_API_KEY'),
           isFalse,
-          reason: 'GEMINI_API_KEY environment lookup found in client ${file.path}',
+          reason:
+              'GEMINI_API_KEY environment lookup found in client ${file.path}',
         );
       }
     });

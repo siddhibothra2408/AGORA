@@ -12,7 +12,7 @@ import '../../../core/theme/agora_typography.dart';
 import '../../../shared/design_system/agora_button.dart';
 import '../../../shared/design_system/agora_states.dart';
 import '../../chat/repositories/chat_repository.dart';
-import 'proposal_tray_sheet.dart';
+import '../screens/private_results_screen.dart';
 
 enum HandoffState { initial, loadingPreview, ready, sending, error }
 
@@ -56,6 +56,9 @@ class _HandoffPreviewSheetState extends ConsumerState<HandoffPreviewSheet> {
   HandoffState _state = HandoffState.loadingPreview;
   String? _errorMessage;
 
+  String _selectedPurpose = 'extract';
+  final _instructionController = TextEditingController();
+
   Map<String, dynamic>? _previewData;
   bool _showRawPayload = false;
 
@@ -63,6 +66,12 @@ class _HandoffPreviewSheetState extends ConsumerState<HandoffPreviewSheet> {
   void initState() {
     super.initState();
     _fetchPreview();
+  }
+
+  @override
+  void dispose() {
+    _instructionController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchPreview() async {
@@ -74,10 +83,12 @@ class _HandoffPreviewSheetState extends ConsumerState<HandoffPreviewSheet> {
     try {
       final functions = ref.read(firebaseFunctionsProvider);
       if (functions != null) {
+        final instruction = _instructionController.text.trim();
         final result = await functions.httpsCallable('previewHandoff').call({
           'spaceId': widget.spaceId,
           'messageIds': widget.selectedMessageIds,
-          'purpose': 'extract',
+          'purpose': _selectedPurpose,
+          if (instruction.isNotEmpty) 'customInstruction': instruction,
         });
         if (mounted) {
           setState(() {
@@ -168,11 +179,13 @@ class _HandoffPreviewSheetState extends ConsumerState<HandoffPreviewSheet> {
       final functions = ref.read(firebaseFunctionsProvider);
       final requestId = _uuid.v4();
 
+      final instruction = _instructionController.text.trim();
       if (functions != null) {
         await functions.httpsCallable('runHandoff').call({
           'spaceId': widget.spaceId,
           'messageIds': widget.selectedMessageIds,
-          'purpose': 'extract',
+          'purpose': _selectedPurpose,
+          if (instruction.isNotEmpty) 'customInstruction': instruction,
           'requestId': requestId,
           'expectedPayloadHash': _previewData!['payloadHash'],
           'expectedCharterVersion': _previewData!['charterVersion'],
@@ -184,8 +197,13 @@ class _HandoffPreviewSheetState extends ConsumerState<HandoffPreviewSheet> {
         if (widget.onCompleted != null) {
           widget.onCompleted!();
         }
-        // Open Proposal Tray
-        ProposalTraySheet.show(context, widget.spaceId);
+        final uid = ref.read(currentUserIdProvider) ?? 'me';
+        // Open Private Results Screen
+        PrivateResultsScreen.show(
+          context,
+          spaceId: widget.spaceId,
+          handoffId: '${uid}_$requestId',
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -366,6 +384,82 @@ class _HandoffPreviewSheetState extends ConsumerState<HandoffPreviewSheet> {
 
     return ListView(
       children: [
+        // Purpose Selector Strip
+        Container(
+          padding: const EdgeInsets.all(AgoraSpacing.md),
+          decoration: BoxDecoration(
+            color: AgoraColors.surface,
+            borderRadius: BorderRadius.circular(AgoraRadius.md),
+            border: Border.all(color: AgoraColors.surfaceBorder),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Handoff Purpose',
+                style: AgoraTypography.titleMedium.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: AgoraSpacing.xs),
+              Wrap(
+                spacing: AgoraSpacing.xs,
+                children: [
+                  ChoiceChip(
+                    label: const Text('Tasks & Decisions'),
+                    selected: _selectedPurpose == 'extract',
+                    onSelected: (val) {
+                      if (val) {
+                        setState(() => _selectedPurpose = 'extract');
+                        _fetchPreview();
+                      }
+                    },
+                  ),
+                  ChoiceChip(
+                    label: const Text('Action Items'),
+                    selected: _selectedPurpose == 'actions',
+                    onSelected: (val) {
+                      if (val) {
+                        setState(() => _selectedPurpose = 'actions');
+                        _fetchPreview();
+                      }
+                    },
+                  ),
+                  ChoiceChip(
+                    label: const Text('Decisions Summary'),
+                    selected: _selectedPurpose == 'summarize',
+                    onSelected: (val) {
+                      if (val) {
+                        setState(() => _selectedPurpose = 'summarize');
+                        _fetchPreview();
+                      }
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: AgoraSpacing.sm),
+              TextField(
+                controller: _instructionController,
+                maxLength: 200,
+                style: AgoraTypography.bodyMedium,
+                decoration: InputDecoration(
+                  labelText: 'Optional Guidance for AI',
+                  hintText: 'e.g. Focus on milestone deliverables...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AgoraRadius.sm),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+                onSubmitted: (_) => _fetchPreview(),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AgoraSpacing.md),
+
         // Consent & Exclusion Summary Box
         Container(
           padding: const EdgeInsets.all(AgoraSpacing.md),

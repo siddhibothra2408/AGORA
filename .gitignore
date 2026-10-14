@@ -54,3 +54,12 @@ firebase-debug.log
 firebase-debug.*.log
 functions/node_modules/
 functions/lib/
+functions/.secret.local
+*.secret.local
+.env.local
+*.env.local
+*service-account*.json
+*serviceAccount*.json
+emulator-data/
+.firebase/
+

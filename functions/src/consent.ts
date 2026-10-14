@@ -64,8 +64,10 @@ export interface MessageData {
 export type HandoffEvaluationReason =
   | "included-own"
   | "included-consented"
+  | "excluded-author-not-allowed"
   | "excluded-withheld"
   | "excluded-deleted"
+  | "excluded-unavailable"
   | "excluded-invalid";
 
 export const AI_POLICY_RANK: Record<AiHandoffPolicy, number> = {
@@ -138,7 +140,7 @@ export function evaluateMessageForHandoff(params: {
     return { canInclude: true, reason: "included-consented" };
   }
 
-  return { canInclude: false, reason: "excluded-withheld" };
+  return { canInclude: false, reason: "excluded-author-not-allowed" };
 }
 
 /**
@@ -200,19 +202,21 @@ export function redactContent(text: string): string {
 }
 
 /**
- * Computes canonical SHA-256 hash over the payload, charterVersion, policy, and purpose.
+ * Computes canonical SHA-256 hash over the payload, charterVersion, policy, purpose, and customInstruction.
  */
 export function computePayloadHash(
   payload: Array<{ token: string; authorLabel: string; timestampIso: string; text: string }>,
   charterVersion: number,
   policy: string,
-  purpose: string
+  purpose: string,
+  customInstruction?: string
 ): string {
   const canonicalData = {
     payload,
     charterVersion,
     policy,
     purpose,
+    customInstruction: customInstruction || "",
   };
   const jsonStr = JSON.stringify(canonicalData);
   return crypto.createHash("sha256").update(jsonStr, "utf8").digest("hex");

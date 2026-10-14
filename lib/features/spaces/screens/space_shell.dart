@@ -8,6 +8,7 @@ import '../../../core/theme/agora_typography.dart';
 import '../../../shared/design_system/agora_badge.dart';
 import '../../../shared/design_system/agora_states.dart';
 import '../../handoffs/screens/ai_ledger_screen.dart';
+import '../../handoffs/screens/my_ai_results_screen.dart';
 import '../../handoffs/widgets/proposal_tray_sheet.dart';
 import '../repositories/space_repository.dart';
 import 'charter_screen.dart';
@@ -115,6 +116,12 @@ class SpaceShell extends ConsumerWidget {
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: 'My AI Results',
+                icon: const Icon(Icons.lock_outline, color: AgoraColors.navy),
+                onPressed: () =>
+                    MyAiResultsScreen.show(context, spaceId: spaceId),
+              ),
               IconButton(
                 tooltip: 'Proposal Tray',
                 icon: const Icon(Icons.inbox_outlined, color: AgoraColors.navy),
