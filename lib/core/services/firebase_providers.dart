@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -19,6 +20,16 @@ final firestoreProvider = Provider<FirebaseFirestore?>((ref) {
   if (!AgoraFirebaseConfig.isInitialized) return null;
   try {
     return FirebaseFirestore.instance;
+  } catch (_) {
+    return null;
+  }
+});
+
+/// Provider for FirebaseFunctions instance
+final firebaseFunctionsProvider = Provider<FirebaseFunctions?>((ref) {
+  if (!AgoraFirebaseConfig.isInitialized) return null;
+  try {
+    return FirebaseFunctions.instance;
   } catch (_) {
     return null;
   }

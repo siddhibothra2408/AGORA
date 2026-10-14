@@ -16,6 +16,7 @@ import '../../spaces/repositories/space_repository.dart';
 import '../../spaces/widgets/catch_up_card.dart';
 import '../models/item.dart';
 import '../repositories/item_repository.dart';
+import '../widgets/item_receipts_sheet.dart';
 
 class BoardScreen extends ConsumerStatefulWidget {
   const BoardScreen({super.key, required this.spaceId});
@@ -151,6 +152,7 @@ class _BoardScreenState extends ConsumerState<BoardScreen> {
                 itemBuilder: (context, index) {
                   final item = items[index];
                   return _BoardItemCard(
+                    spaceId: widget.spaceId,
                     item: item,
                     onStatusChanged: (newStatus) {
                       ref
@@ -205,8 +207,13 @@ class _FilterChip extends StatelessWidget {
 }
 
 class _BoardItemCard extends StatelessWidget {
-  const _BoardItemCard({required this.item, required this.onStatusChanged});
+  const _BoardItemCard({
+    required this.spaceId,
+    required this.item,
+    required this.onStatusChanged,
+  });
 
+  final String spaceId;
   final Item item;
   final ValueChanged<ItemStatus> onStatusChanged;
 
@@ -233,6 +240,7 @@ class _BoardItemCard extends StatelessWidget {
     final isDone = item.status == ItemStatus.completed;
 
     return AgoraCard(
+      onTap: () => ItemReceiptsSheet.show(context, spaceId, item),
       padding: const EdgeInsets.all(AgoraSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

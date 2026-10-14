@@ -14,7 +14,17 @@ abstract class ChatRepository {
     required String spaceId,
     required String text,
     required UserProfile sender,
+    String? replyToId,
     bool aiWithheld = false,
+  });
+  Future<void> editMessage({
+    required String spaceId,
+    required String messageId,
+    required String newText,
+  });
+  Future<void> deleteMessage({
+    required String spaceId,
+    required String messageId,
   });
   Future<void> setMessageWithhold({
     required String spaceId,
@@ -61,6 +71,7 @@ class FirestoreChatRepository implements ChatRepository {
     required String spaceId,
     required String text,
     required UserProfile sender,
+    String? replyToId,
     bool aiWithheld = false,
   }) async {
     final trimmed = text.trim();
@@ -82,15 +93,69 @@ class FirestoreChatRepository implements ChatRepository {
       createdAt: now,
       aiWithheld: aiWithheld,
       handoffHistory: const [],
+      replyToId: replyToId,
     );
 
     try {
-      await firestore
-          .doc(FirestorePaths.spaceMessage(spaceId, messageId))
-          .set(message.toMap());
+      if (firestoreInstance != null) {
+        // Enforce strict firestore.rules payload: hasOnly ['senderId', 'kind', 'text', 'createdAt', 'replyToId']
+        final payload = <String, dynamic>{
+          'senderId': sender.uid,
+          'kind': 'text',
+          'text': trimmed,
+          'createdAt': FieldValue.serverTimestamp(),
+        };
+        if (replyToId != null) {
+          payload['replyToId'] = replyToId;
+        }
+        await firestore
+            .doc(FirestorePaths.spaceMessage(spaceId, messageId))
+            .set(payload);
+      }
       return message;
     } catch (e) {
       throw DataFailure('Failed to send message: $e');
+    }
+  }
+
+  @override
+  Future<void> editMessage({
+    required String spaceId,
+    required String messageId,
+    required String newText,
+  }) async {
+    final trimmed = newText.trim();
+    if (trimmed.isEmpty) {
+      throw const DataFailure('Edited text cannot be empty.');
+    }
+    try {
+      if (firestoreInstance != null) {
+        await firestore
+            .doc(FirestorePaths.spaceMessage(spaceId, messageId))
+            .update({
+              'text': trimmed,
+              'editedAt': FieldValue.serverTimestamp(),
+            });
+      }
+    } catch (e) {
+      throw DataFailure('Failed to edit message: $e');
+    }
+  }
+
+  @override
+  Future<void> deleteMessage({
+    required String spaceId,
+    required String messageId,
+  }) async {
+    try {
+      if (firestoreInstance != null) {
+        // Tombstone deletion per spec
+        await firestore
+            .doc(FirestorePaths.spaceMessage(spaceId, messageId))
+            .update({'text': '', 'deletedAt': FieldValue.serverTimestamp()});
+      }
+    } catch (e) {
+      throw DataFailure('Failed to delete message: $e');
     }
   }
 

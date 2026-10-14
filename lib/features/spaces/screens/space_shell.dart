@@ -7,7 +7,10 @@ import '../../../core/theme/agora_spacing.dart';
 import '../../../core/theme/agora_typography.dart';
 import '../../../shared/design_system/agora_badge.dart';
 import '../../../shared/design_system/agora_states.dart';
+import '../../handoffs/screens/ai_ledger_screen.dart';
+import '../../handoffs/widgets/proposal_tray_sheet.dart';
 import '../repositories/space_repository.dart';
+import 'charter_screen.dart';
 
 class SpaceShell extends ConsumerWidget {
   const SpaceShell({super.key, required this.spaceId, required this.child});
@@ -111,6 +114,38 @@ class SpaceShell extends ConsumerWidget {
                 ),
               ],
             ),
+            actions: [
+              IconButton(
+                tooltip: 'Proposal Tray',
+                icon: const Icon(Icons.inbox_outlined, color: AgoraColors.navy),
+                onPressed: () => ProposalTraySheet.show(context, spaceId),
+              ),
+              IconButton(
+                tooltip: 'AI Handoff Ledger',
+                icon: const Icon(
+                  Icons.auto_awesome,
+                  color: AgoraColors.goldDark,
+                ),
+                onPressed: () => AiLedgerScreen.show(context, spaceId),
+              ),
+              IconButton(
+                tooltip: 'Charter & Consent',
+                icon: const Icon(
+                  Icons.shield_outlined,
+                  color: AgoraColors.navy,
+                ),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => CharterScreen(
+                        spaceId: spaceId,
+                        charterVersion: space.charterVersion,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(48),
               child: Container(

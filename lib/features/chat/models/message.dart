@@ -5,8 +5,9 @@ import '../../../core/utils/date_parser.dart';
 /// Agora Message Model (stored at `spaces/{spaceId}/messages/{messageId}`)
 ///
 /// Implements consent-first invariant:
-/// Message authors have absolute veto to mark their message as [aiWithheld].
-/// If [aiWithheld] is true, the message CANNOT be packaged or handed to AI.
+/// Message authors control whether their messages may be handed to AI.
+/// Author consent is evaluated per member in backend consent module.
+/// Messages support 15-minute edit windows, tombstones, item cards, and gold footprint markers.
 @immutable
 class Message {
   const Message({
@@ -20,6 +21,12 @@ class Message {
     required this.createdAt,
     this.aiWithheld = false,
     this.handoffHistory = const [],
+    this.kind = 'text',
+    this.replyToId,
+    this.editedAt,
+    this.deletedAt,
+    this.aiSeenCount = 0,
+    this.itemRef,
   });
 
   final String id;
@@ -32,6 +39,16 @@ class Message {
   final DateTime createdAt;
   final bool aiWithheld;
   final List<String> handoffHistory;
+  final String kind; // 'text' | 'itemCard'
+  final String? replyToId;
+  final DateTime? editedAt;
+  final DateTime? deletedAt;
+  final int aiSeenCount;
+  final Map<String, dynamic>? itemRef;
+
+  bool get isDeleted => deletedAt != null;
+  bool get isEdited => editedAt != null && !isDeleted;
+  bool get isItemCard => kind == 'itemCard';
 
   Message copyWith({
     String? id,
@@ -44,6 +61,12 @@ class Message {
     DateTime? createdAt,
     bool? aiWithheld,
     List<String>? handoffHistory,
+    String? kind,
+    String? replyToId,
+    DateTime? editedAt,
+    DateTime? deletedAt,
+    int? aiSeenCount,
+    Map<String, dynamic>? itemRef,
   }) {
     return Message(
       id: id ?? this.id,
@@ -56,6 +79,12 @@ class Message {
       createdAt: createdAt ?? this.createdAt,
       aiWithheld: aiWithheld ?? this.aiWithheld,
       handoffHistory: handoffHistory ?? this.handoffHistory,
+      kind: kind ?? this.kind,
+      replyToId: replyToId ?? this.replyToId,
+      editedAt: editedAt ?? this.editedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      aiSeenCount: aiSeenCount ?? this.aiSeenCount,
+      itemRef: itemRef ?? this.itemRef,
     );
   }
 
@@ -71,6 +100,12 @@ class Message {
       'createdAt': DateParser.toFirestore(createdAt),
       'aiWithheld': aiWithheld,
       'handoffHistory': handoffHistory,
+      'kind': kind,
+      if (replyToId != null) 'replyToId': replyToId,
+      if (editedAt != null) 'editedAt': DateParser.toFirestore(editedAt!),
+      if (deletedAt != null) 'deletedAt': DateParser.toFirestore(deletedAt!),
+      'aiSeenCount': aiSeenCount,
+      if (itemRef != null) 'itemRef': itemRef,
     };
   }
 
@@ -79,8 +114,12 @@ class Message {
       id: id,
       spaceId: spaceId,
       senderId: map['senderId'] as String? ?? '',
-      senderHandle: map['senderHandle'] as String? ?? 'user',
-      senderDisplayName: map['senderDisplayName'] as String? ?? 'User',
+      senderHandle:
+          map['senderHandle'] as String? ??
+          (map['senderId'] as String? ?? 'user'),
+      senderDisplayName:
+          map['senderDisplayName'] as String? ??
+          (map['senderId'] as String? ?? 'User'),
       senderPhotoUrl: map['senderPhotoUrl'] as String?,
       text: map['text'] as String? ?? '',
       createdAt: DateParser.parse(map['createdAt']),
@@ -88,6 +127,18 @@ class Message {
       handoffHistory: List<String>.from(
         map['handoffHistory'] as List? ?? const [],
       ),
+      kind: map['kind'] as String? ?? 'text',
+      replyToId: map['replyToId'] as String?,
+      editedAt: map['editedAt'] != null
+          ? DateParser.parse(map['editedAt'])
+          : null,
+      deletedAt: map['deletedAt'] != null
+          ? DateParser.parse(map['deletedAt'])
+          : null,
+      aiSeenCount: (map['aiSeenCount'] as num?)?.toInt() ?? 0,
+      itemRef: map['itemRef'] != null
+          ? Map<String, dynamic>.from(map['itemRef'] as Map)
+          : null,
     );
   }
 
@@ -100,7 +151,10 @@ class Message {
           spaceId == other.spaceId &&
           senderId == other.senderId &&
           text == other.text &&
-          aiWithheld == other.aiWithheld;
+          aiWithheld == other.aiWithheld &&
+          kind == other.kind &&
+          aiSeenCount == other.aiSeenCount &&
+          deletedAt == other.deletedAt;
 
   @override
   int get hashCode =>
@@ -108,5 +162,7 @@ class Message {
       spaceId.hashCode ^
       senderId.hashCode ^
       text.hashCode ^
-      aiWithheld.hashCode;
+      aiWithheld.hashCode ^
+      kind.hashCode ^
+      aiSeenCount.hashCode;
 }

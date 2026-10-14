@@ -45,6 +45,7 @@ dependencies:
   google_sign_in: 6.2.2
   uuid: ^4.6.0
   intl: ^0.20.3
+  cloud_functions: ^6.5.0
 
 dev_dependencies:
   flutter_test:

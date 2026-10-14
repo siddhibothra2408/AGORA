@@ -1,6 +1,7 @@
 import 'dart:developer' as developer;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -12,8 +13,14 @@ abstract final class AgoraFirebaseConfig {
   /// Initialize Firebase with optional emulator support
   static Future<void> initialize({
     FirebaseOptions? options,
-    bool useEmulator = const bool.fromEnvironment('USE_FIREBASE_EMULATOR'),
-    String emulatorHost = '10.0.2.2', // Standard Android emulator loopback
+    bool useEmulator = const bool.fromEnvironment(
+      'USE_EMULATORS',
+      defaultValue: bool.fromEnvironment('USE_FIREBASE_EMULATOR'),
+    ),
+    String emulatorHost = const String.fromEnvironment(
+      'EMULATOR_HOST',
+      defaultValue: '10.0.2.2',
+    ), // Standard Android emulator loopback
   }) async {
     try {
       if (Firebase.apps.isNotEmpty) {
@@ -60,6 +67,9 @@ abstract final class AgoraFirebaseConfig {
       FirebaseFirestore.instance.settings = const Settings(
         persistenceEnabled: false,
       );
+
+      // Functions emulator (port 5001)
+      FirebaseFunctions.instance.useFunctionsEmulator(host, 5001);
     } catch (e, st) {
       developer.log(
         'Emulator connection notice',

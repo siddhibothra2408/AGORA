@@ -14,6 +14,7 @@ class Space {
     required this.createdBy,
     required this.createdAt,
     this.memberCount = 1,
+    this.charterVersion = 1,
     this.aiPolicy = const AiPolicy(),
   });
 
@@ -24,6 +25,7 @@ class Space {
   final String createdBy;
   final DateTime createdAt;
   final int memberCount;
+  final int charterVersion;
   final AiPolicy aiPolicy;
 
   Space copyWith({
@@ -34,6 +36,7 @@ class Space {
     String? createdBy,
     DateTime? createdAt,
     int? memberCount,
+    int? charterVersion,
     AiPolicy? aiPolicy,
   }) {
     return Space(
@@ -44,6 +47,7 @@ class Space {
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       memberCount: memberCount ?? this.memberCount,
+      charterVersion: charterVersion ?? this.charterVersion,
       aiPolicy: aiPolicy ?? this.aiPolicy,
     );
   }
@@ -57,6 +61,7 @@ class Space {
       'createdBy': createdBy,
       'createdAt': DateParser.toFirestore(createdAt),
       'memberCount': memberCount,
+      'charterVersion': charterVersion,
       'aiPolicy': aiPolicy.toMap(),
     };
   }
@@ -70,6 +75,7 @@ class Space {
       createdBy: map['createdBy'] as String? ?? '',
       createdAt: DateParser.parse(map['createdAt']),
       memberCount: (map['memberCount'] as num?)?.toInt() ?? 1,
+      charterVersion: (map['charterVersion'] as num?)?.toInt() ?? 1,
       aiPolicy: AiPolicy.fromMap(map['aiPolicy'] as Map<String, dynamic>?),
     );
   }
