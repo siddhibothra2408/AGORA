@@ -29,6 +29,15 @@ class Handoff {
   final Map<String, dynamic> auditLog;
 
   int get messageCount => messageIds.length;
+  int get proposalCount => auditLog['proposalCount'] as int? ?? 0;
+  int get acceptedCount => auditLog['acceptedCount'] as int? ?? 0;
+  int get dismissedCount => auditLog['dismissedCount'] as int? ?? 0;
+  int get withheldCount => auditLog['withheldCount'] as int? ?? 0;
+  int get deletedCount => auditLog['deletedCount'] as int? ?? 0;
+  String get provider => auditLog['provider'] as String? ?? 'gemini-1.5';
+  String get status =>
+      auditLog['status'] as String? ??
+      (auditLog['dispatched'] == true ? 'dispatched' : 'completed');
 
   Handoff copyWith({
     String? id,

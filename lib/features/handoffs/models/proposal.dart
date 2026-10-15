@@ -54,6 +54,37 @@ class Proposal {
 
   bool get isPending => status == ProposalStatus.pending;
   bool get isApproved => status == ProposalStatus.approved;
+  bool get isDismissed => status == ProposalStatus.dismissed;
+
+  String get detail =>
+      payload['detail'] as String? ?? payload['description'] as String? ?? '';
+
+  String? get confidence {
+    if (payload['confidence'] != null) {
+      return payload['confidence'].toString();
+    }
+    if (payload['confidenceScore'] != null) {
+      return '${((payload['confidenceScore'] as num) * 100).toInt()}%';
+    }
+    return null;
+  }
+
+  String? get suggestedAssigneeUid =>
+      payload['suggestedAssigneeUid'] as String?;
+  String? get suggestedAssigneeName =>
+      payload['suggestedAssigneeName'] as String?;
+
+  DateTime? get dueDate {
+    if (payload['dueDate'] == null) return null;
+    return DateTime.tryParse(payload['dueDate'].toString());
+  }
+
+  bool get confirmDate =>
+      payload['confirmDate'] as bool? ??
+      payload['needsDateConfirmation'] as bool? ??
+      false;
+
+  String? get quote => payload['quote'] as String?;
 
   Proposal copyWith({
     String? id,

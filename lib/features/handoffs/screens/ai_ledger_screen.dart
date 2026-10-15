@@ -10,9 +10,17 @@ import '../../../shared/design_system/agora_card.dart';
 import '../../../shared/design_system/agora_states.dart';
 import '../../chat/repositories/chat_repository.dart';
 import '../../items/repositories/item_repository.dart';
+import '../../items/widgets/item_receipts_sheet.dart';
 import '../models/handoff.dart';
 import '../repositories/handoff_repository.dart';
 
+/// AI Handoff Ledger Screen.
+///
+/// Implements the public auditability thesis:
+/// Everyone in the Space can see what was handed to the AI, by whom, and when.
+/// Text of messages is never duplicated into audit docs; instead, audit records
+/// maintain message ID references and live chat storage is queried.
+/// Gold styling is strictly reserved for AI-related elements.
 class AiLedgerScreen extends ConsumerWidget {
   const AiLedgerScreen({super.key, required this.spaceId});
 
@@ -132,10 +140,7 @@ class _HandoffLedgerCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final timeStr = DateFormat('MMM d, h:mm a').format(handoff.createdAt);
     final isFixture =
-        handoff.auditLog['provider'] == 'fixture' ||
-        handoff.id.contains('fixture');
-    final acceptedCount = handoff.auditLog['acceptedCount'] ?? 0;
-    final proposalCount = handoff.auditLog['proposalCount'] ?? 0;
+        handoff.provider == 'fixture' || handoff.id.contains('fixture');
 
     return AgoraCard(
       onTap: onTap,
@@ -150,6 +155,7 @@ class _HandoffLedgerCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AgoraColors.goldContainer,
                   borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: AgoraColors.goldContainerBorder),
                 ),
                 child: Text(
                   'HANDOFF',
@@ -160,24 +166,20 @@ class _HandoffLedgerCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AgoraSpacing.xs),
-              if (isFixture)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AgoraColors.surfaceContainer,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: AgoraColors.surfaceBorder),
-                  ),
-                  child: Text(
-                    'Demo fixture (offline mode)',
-                    style: AgoraTypography.labelSmall.copyWith(
-                      color: AgoraColors.navySubtle,
-                    ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AgoraColors.surfaceContainer,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  isFixture ? 'Demo fixture' : handoff.provider,
+                  style: AgoraTypography.labelSmall.copyWith(
+                    color: AgoraColors.navySubtle,
+                    fontSize: 10,
                   ),
                 ),
+              ),
               const Spacer(),
               Text(
                 timeStr,
@@ -188,7 +190,9 @@ class _HandoffLedgerCard extends StatelessWidget {
           const SizedBox(height: AgoraSpacing.sm),
           Text(
             'Requested by ${handoff.handedByName}',
-            style: AgoraTypography.titleMedium,
+            style: AgoraTypography.titleMedium.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: AgoraSpacing.xs),
           Text(
@@ -196,22 +200,39 @@ class _HandoffLedgerCard extends StatelessWidget {
             style: AgoraTypography.bodySmall,
           ),
           const SizedBox(height: AgoraSpacing.md),
-          Row(
+
+          // Counts Wrap
+          Wrap(
+            spacing: AgoraSpacing.xs,
+            runSpacing: AgoraSpacing.xs,
             children: [
               _StatBadge(
-                label: '${handoff.messageCount} messages handed',
+                label: '${handoff.messageCount} included',
                 color: AgoraColors.aegean,
               ),
-              const SizedBox(width: AgoraSpacing.xs),
+              if (handoff.withheldCount > 0)
+                _StatBadge(
+                  label: '${handoff.withheldCount} withheld',
+                  color: AgoraColors.navySubtle,
+                ),
+              if (handoff.deletedCount > 0)
+                _StatBadge(
+                  label: '${handoff.deletedCount} deleted',
+                  color: AgoraColors.navyMuted,
+                ),
               _StatBadge(
-                label: '$proposalCount proposed',
+                label: '${handoff.proposalCount} proposed',
                 color: AgoraColors.goldDark,
               ),
-              const SizedBox(width: AgoraSpacing.xs),
               _StatBadge(
-                label: '$acceptedCount approved',
+                label: '${handoff.acceptedCount} accepted',
                 color: AgoraColors.success,
               ),
+              if (handoff.dismissedCount > 0)
+                _StatBadge(
+                  label: '${handoff.dismissedCount} dismissed',
+                  color: AgoraColors.navyMuted,
+                ),
             ],
           ),
         ],
@@ -267,7 +288,7 @@ class _HandoffDetailSheet extends ConsumerWidget {
       ),
       padding: const EdgeInsets.all(AgoraSpacing.lg),
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.85,
+        maxHeight: MediaQuery.of(context).size.height * 0.90,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -283,7 +304,26 @@ class _HandoffDetailSheet extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: AgoraSpacing.md),
-          Text('Handoff Detail', style: AgoraTypography.headlineMedium),
+          Row(
+            children: [
+              Text('Handoff Detail', style: AgoraTypography.headlineMedium),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AgoraColors.goldContainer,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  handoff.status.toUpperCase(),
+                  style: AgoraTypography.labelSmall.copyWith(
+                    color: AgoraColors.goldDark,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
           Text(
             'Handoff ID: ${handoff.id}',
             style: AgoraTypography.bodySmall.copyWith(fontSize: 11),
@@ -293,10 +333,53 @@ class _HandoffDetailSheet extends ConsumerWidget {
           Expanded(
             child: ListView(
               children: [
+                // Audit Dispatched & Integrity Box
+                Container(
+                  padding: const EdgeInsets.all(AgoraSpacing.md),
+                  decoration: BoxDecoration(
+                    color: AgoraColors.surface,
+                    borderRadius: BorderRadius.circular(AgoraRadius.md),
+                    border: Border.all(color: AgoraColors.surfaceBorder),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Audit & Dispatch Verification',
+                        style: AgoraTypography.labelSmall.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: AgoraColors.navyDark,
+                        ),
+                      ),
+                      const SizedBox(height: AgoraSpacing.xs),
+                      Text(
+                        'Provider: ${handoff.provider} · Dispatched: ${handoff.auditLog['dispatched'] == true}',
+                        style: AgoraTypography.bodySmall,
+                      ),
+                      Text(
+                        'Messages Included: ${handoff.messageCount} · Withheld by consent: ${handoff.withheldCount} · Deleted: ${handoff.deletedCount}',
+                        style: AgoraTypography.bodySmall,
+                      ),
+                      const SizedBox(height: AgoraSpacing.xs),
+                      Text(
+                        'Agora Guarantee: Message text is never stored in audit docs. Real-time chat storage is verified on read.',
+                        style: AgoraTypography.bodySmall.copyWith(
+                          color: AgoraColors.aegeanDark,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: AgoraSpacing.lg),
+
                 // Live message verification (messages are never duplicated in the handoff doc)
                 Text(
                   'Messages Included (${handoff.messageIds.length})',
-                  style: AgoraTypography.titleMedium,
+                  style: AgoraTypography.titleMedium.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: AgoraSpacing.xs),
                 Text(
@@ -315,7 +398,19 @@ class _HandoffDetailSheet extends ConsumerWidget {
                         .toList();
 
                     if (included.isEmpty) {
-                      return const Text('Source messages unavailable.');
+                      return Container(
+                        padding: const EdgeInsets.all(AgoraSpacing.md),
+                        decoration: BoxDecoration(
+                          color: AgoraColors.surfaceContainer,
+                          borderRadius: BorderRadius.circular(AgoraRadius.sm),
+                        ),
+                        child: Text(
+                          'Source messages unavailable or deleted.',
+                          style: AgoraTypography.bodySmall.copyWith(
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      );
                     }
 
                     return Column(
@@ -335,14 +430,35 @@ class _HandoffDetailSheet extends ConsumerWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                '${m.senderDisplayName} · ${m.id}',
-                                style: AgoraTypography.labelSmall.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              Row(
+                                children: [
+                                  Text(
+                                    m.senderDisplayName,
+                                    style: AgoraTypography.labelSmall.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(width: AgoraSpacing.xs),
+                                  Text(
+                                    DateFormat('h:mm a').format(m.createdAt),
+                                    style: AgoraTypography.bodySmall.copyWith(
+                                      fontSize: 10,
+                                      color: AgoraColors.navySubtle,
+                                    ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 2),
-                              Text(m.text, style: AgoraTypography.bodySmall),
+                              Text(
+                                m.isDeleted
+                                    ? '[Message was deleted by author]'
+                                    : m.text,
+                                style: AgoraTypography.bodySmall.copyWith(
+                                  fontStyle: m.isDeleted
+                                      ? FontStyle.italic
+                                      : null,
+                                ),
+                              ),
                             ],
                           ),
                         );
@@ -351,12 +467,14 @@ class _HandoffDetailSheet extends ConsumerWidget {
                   },
                 ),
 
-                const SizedBox(height: AgoraSpacing.md),
+                const SizedBox(height: AgoraSpacing.lg),
 
                 // Approved Items from this Handoff
                 Text(
-                  'Items Promoted from Handoff',
-                  style: AgoraTypography.titleMedium,
+                  'Items Promoted to Board (${handoff.acceptedCount})',
+                  style: AgoraTypography.titleMedium.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: AgoraSpacing.xs),
 
@@ -371,41 +489,54 @@ class _HandoffDetailSheet extends ConsumerWidget {
                     if (fromHandoff.isEmpty) {
                       return Text(
                         'No items approved into the Board from this handoff yet.',
-                        style: AgoraTypography.bodySmall,
+                        style: AgoraTypography.bodySmall.copyWith(
+                          color: AgoraColors.navySubtle,
+                        ),
                       );
                     }
 
                     return Column(
                       children: fromHandoff.map((i) {
-                        return Container(
-                          margin: const EdgeInsets.only(
-                            bottom: AgoraSpacing.xs,
-                          ),
-                          padding: const EdgeInsets.all(AgoraSpacing.sm),
-                          decoration: BoxDecoration(
-                            color: AgoraColors.surface,
-                            borderRadius: BorderRadius.circular(AgoraRadius.sm),
-                            border: Border.all(
-                              color: AgoraColors.goldContainerBorder,
+                        return InkWell(
+                          onTap: () =>
+                              ItemReceiptsSheet.show(context, spaceId, i),
+                          child: Container(
+                            margin: const EdgeInsets.only(
+                              bottom: AgoraSpacing.xs,
                             ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.check_circle_outline,
-                                color: AgoraColors.success,
-                                size: 16,
+                            padding: const EdgeInsets.all(AgoraSpacing.sm),
+                            decoration: BoxDecoration(
+                              color: AgoraColors.surface,
+                              borderRadius: BorderRadius.circular(
+                                AgoraRadius.sm,
                               ),
-                              const SizedBox(width: AgoraSpacing.sm),
-                              Expanded(
-                                child: Text(
-                                  i.title,
-                                  style: AgoraTypography.bodySmall.copyWith(
-                                    fontWeight: FontWeight.w600,
+                              border: Border.all(
+                                color: AgoraColors.goldContainerBorder,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle_outline,
+                                  color: AgoraColors.success,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: AgoraSpacing.sm),
+                                Expanded(
+                                  child: Text(
+                                    i.title,
+                                    style: AgoraTypography.bodySmall.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                                const Icon(
+                                  Icons.chevron_right,
+                                  size: 16,
+                                  color: AgoraColors.navySubtle,
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       }).toList(),

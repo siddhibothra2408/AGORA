@@ -14,7 +14,10 @@ import '../../handoffs/repositories/handoff_repository.dart';
 import '../../handoffs/screens/ai_ledger_screen.dart';
 import '../../handoffs/widgets/handoff_preview_sheet.dart';
 import '../../handoffs/widgets/proposal_tray_sheet.dart';
+import '../../items/models/item.dart';
 import '../../items/repositories/item_repository.dart';
+import '../../items/screens/board_screen.dart';
+import '../../items/widgets/item_receipts_sheet.dart';
 import '../../profile/models/user_profile.dart';
 import '../../profile/repositories/profile_repository.dart';
 import '../../spaces/models/catch_up_summary.dart';
@@ -213,6 +216,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 setState(() => _replyToMessage = message);
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.add_task, color: AgoraColors.aegean),
+              title: const Text('Make task / decision / question'),
+              subtitle: const Text(
+                'Promote manually with this message as provenance',
+              ),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                ManualCreateItemSheet.show(
+                  context,
+                  spaceId: widget.spaceId,
+                  initialSourceMessageIds: [message.id],
+                );
+              },
+            ),
             if (canEdit)
               ListTile(
                 leading: const Icon(
@@ -297,6 +315,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _showFootprintSheet(BuildContext context, Message message) {
+    final allHandoffs =
+        ref.read(spaceHandoffsProvider(widget.spaceId)).value ?? [];
+    final matchingHandoffs = allHandoffs
+        .where((h) => h.messageIds.contains(message.id))
+        .toList();
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AgoraColors.surface,
@@ -334,6 +358,74 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 style: AgoraTypography.bodyMedium,
               ),
               const SizedBox(height: AgoraSpacing.md),
+
+              if (matchingHandoffs.isNotEmpty) ...[
+                Text(
+                  'Included in Handoffs (${matchingHandoffs.length}):',
+                  style: AgoraTypography.labelSmall.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AgoraColors.goldDark,
+                  ),
+                ),
+                const SizedBox(height: AgoraSpacing.xs),
+                ...matchingHandoffs
+                    .take(4)
+                    .map(
+                      (h) => Container(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AgoraColors.goldContainer.withValues(
+                            alpha: 0.3,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: AgoraColors.goldContainerBorder,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.history_edu,
+                              size: 14,
+                              color: AgoraColors.goldDark,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${h.handedByName} · ${DateFormat('MMM d, h:mm a').format(h.createdAt)}',
+                                    style: AgoraTypography.labelSmall.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Purpose: ${h.promptContext ?? "Extract tasks, decisions, questions"}',
+                                    style: AgoraTypography.bodySmall.copyWith(
+                                      fontSize: 10,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              h.provider,
+                              style: AgoraTypography.labelSmall.copyWith(
+                                fontSize: 9,
+                                color: AgoraColors.navySubtle,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                const SizedBox(height: AgoraSpacing.sm),
+              ],
+
               Text(
                 'Full audit logs with timestamps and exact handed payloads are recorded in the AI Ledger.',
                 style: AgoraTypography.bodySmall,
@@ -577,8 +669,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     if (msg.isItemCard) {
                       return _ItemCardBubble(
                         message: msg,
-                        onTap: () =>
-                            context.go('/spaces/${widget.spaceId}/board'),
+                        onTap: () {
+                          final itemId =
+                              msg.itemRef?['itemId'] as String? ??
+                              msg.id.replaceFirst('item_', '');
+                          final items =
+                              ref
+                                  .read(
+                                    spaceItemsProvider((
+                                      spaceId: widget.spaceId,
+                                      type: null,
+                                    )),
+                                  )
+                                  .value ??
+                              [];
+                          final targetItem = items.cast<Item?>().firstWhere(
+                            (it) => it?.id == itemId,
+                            orElse: () => null,
+                          );
+                          if (targetItem != null) {
+                            ItemReceiptsSheet.show(
+                              context,
+                              widget.spaceId,
+                              targetItem,
+                            );
+                          } else {
+                            context.go('/spaces/${widget.spaceId}/board');
+                          }
+                        },
                       );
                     }
 
@@ -784,38 +902,42 @@ class _ChatMessageBubble extends StatelessWidget {
                       AgoraConsentBadge(isWithheld: message.aiWithheld),
                       if (message.aiSeenCount > 0) ...[
                         const SizedBox(width: AgoraSpacing.xs),
-                        InkWell(
-                          onTap: onFootprintTap,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AgoraColors.goldContainer,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: AgoraColors.goldContainerBorder,
+                        Semantics(
+                          label: 'Included in an AI handoff',
+                          button: true,
+                          child: InkWell(
+                            onTap: onFootprintTap,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
                               ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.auto_awesome,
-                                  size: 11,
-                                  color: AgoraColors.goldDark,
+                              decoration: BoxDecoration(
+                                color: AgoraColors.goldContainer,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: AgoraColors.goldContainerBorder,
                                 ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  'AI Seen',
-                                  style: AgoraTypography.labelSmall.copyWith(
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.auto_awesome,
+                                    size: 11,
                                     color: AgoraColors.goldDark,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    'AI Seen',
+                                    style: AgoraTypography.labelSmall.copyWith(
+                                      color: AgoraColors.goldDark,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),

@@ -10,6 +10,7 @@ import '../../../shared/design_system/agora_states.dart';
 import '../../items/models/item.dart';
 import '../models/proposal.dart';
 import '../repositories/handoff_repository.dart';
+import '../widgets/proposal_tray_sheet.dart';
 
 class PrivateResultsScreen extends ConsumerWidget {
   const PrivateResultsScreen({
@@ -49,6 +50,13 @@ class PrivateResultsScreen extends ConsumerWidget {
             const Text('Private AI Proposals'),
           ],
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Open Proposal Tray',
+            icon: const Icon(Icons.inbox_outlined, color: AgoraColors.navy),
+            onPressed: () => ProposalTraySheet.show(context, spaceId),
+          ),
+        ],
         backgroundColor: AgoraColors.surface,
         elevation: 0,
       ),

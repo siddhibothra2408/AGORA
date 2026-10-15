@@ -9,8 +9,17 @@ import '../../../core/theme/agora_typography.dart';
 import '../../../shared/design_system/agora_badge.dart';
 import '../../chat/models/message.dart';
 import '../../chat/repositories/chat_repository.dart';
+import '../../handoffs/models/handoff.dart';
+import '../../handoffs/repositories/handoff_repository.dart';
 import '../models/item.dart';
 
+/// Provenance Receipts Sheet.
+///
+/// Implements the immutable provenance thesis:
+/// Every task, decision, and question links directly to the exact source messages
+/// from which it was proposed, with preceding and succeeding chat context.
+/// Provenance is never fabricated: deleted messages honestly display "Source message deleted".
+/// Gold styling is strictly reserved for AI-originated elements.
 class ItemReceiptsSheet extends ConsumerWidget {
   const ItemReceiptsSheet({
     super.key,
@@ -33,7 +42,17 @@ class ItemReceiptsSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final messagesAsync = ref.watch(spaceMessagesProvider(spaceId));
-    final isAi = item.sourceHandoffId.isNotEmpty;
+    final handoffsAsync = ref.watch(spaceHandoffsProvider(spaceId));
+    final isAi = item.isAiOrigin;
+
+    // Find the handoff record if this is an AI item
+    final handoffs = handoffsAsync.value ?? [];
+    final handoff = item.sourceHandoffId.isNotEmpty
+        ? handoffs.cast<Handoff?>().firstWhere(
+            (h) => h?.id == item.sourceHandoffId,
+            orElse: () => null,
+          )
+        : null;
 
     return Container(
       decoration: const BoxDecoration(
@@ -44,11 +63,12 @@ class ItemReceiptsSheet extends ConsumerWidget {
       ),
       padding: const EdgeInsets.all(AgoraSpacing.lg),
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.88,
+        maxHeight: MediaQuery.of(context).size.height * 0.90,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Drag Handle
           Center(
             child: Container(
               width: 36,
@@ -61,7 +81,7 @@ class ItemReceiptsSheet extends ConsumerWidget {
           ),
           const SizedBox(height: AgoraSpacing.md),
 
-          // Title & Origin Header
+          // Title & Origin Header (Gold reserved exclusively for AI)
           Row(
             children: [
               if (isAi)
@@ -117,10 +137,61 @@ class ItemReceiptsSheet extends ConsumerWidget {
           ],
           const SizedBox(height: AgoraSpacing.md),
 
+          // AI Provenance Metadata Box (Only for AI-assisted items)
+          if (isAi) ...[
+            Container(
+              padding: const EdgeInsets.all(AgoraSpacing.sm),
+              decoration: BoxDecoration(
+                color: AgoraColors.goldContainer.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(AgoraRadius.sm),
+                border: Border.all(color: AgoraColors.goldContainerBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.shield_outlined,
+                        size: 14,
+                        color: AgoraColors.goldDark,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'AI Provenance Record',
+                        style: AgoraTypography.labelSmall.copyWith(
+                          color: AgoraColors.goldDark,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        handoff?.provider ?? 'Gemini 1.5 Pro',
+                        style: AgoraTypography.labelSmall.copyWith(
+                          color: AgoraColors.goldDark,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Handed off by ${handoff?.handedByName ?? "Team Member"}${handoff != null ? " on ${DateFormat('MMM d, h:mm a').format(handoff.createdAt)}" : ""}. Approved by ${item.approvedByUid.isNotEmpty ? item.approvedByUid : "caller"}.',
+                    style: AgoraTypography.bodySmall.copyWith(
+                      color: AgoraColors.navyDark,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AgoraSpacing.md),
+          ],
+
           const Divider(height: 1),
           const SizedBox(height: AgoraSpacing.md),
 
-          // Provenance Receipts Section
+          // Receipts Section Header
           Row(
             children: [
               const Icon(Icons.receipt_long, size: 20, color: AgoraColors.navy),
@@ -140,6 +211,7 @@ class ItemReceiptsSheet extends ConsumerWidget {
           ),
           const SizedBox(height: AgoraSpacing.md),
 
+          // Receipts Timeline
           Expanded(
             child: messagesAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -167,9 +239,21 @@ class ItemReceiptsSheet extends ConsumerWidget {
                         ? sortedMessages[sourceIndex]
                         : null;
 
-                    if (sourceMsg == null) {
-                      return _MissingSourceCard(sourceId: sourceId);
+                    // If source is missing or deleted, honestly show "Source message deleted"
+                    if (sourceMsg == null || sourceMsg.isDeleted) {
+                      return _DeletedSourceCard(sourceId: sourceId);
                     }
+
+                    // Look up ref flag
+                    final sourceRef = item.sourceRefs
+                        .cast<ItemSourceRef?>()
+                        .firstWhere(
+                          (r) => r?.messageId == sourceId,
+                          orElse: () => null,
+                        );
+                    final isEditedSinceHandoff =
+                        (sourceRef?.editedSinceHandoff ?? false) ||
+                        sourceMsg.isEdited;
 
                     // Context before (up to 2)
                     final beforeMessages = <Message>[];
@@ -198,7 +282,9 @@ class ItemReceiptsSheet extends ConsumerWidget {
                         color: AgoraColors.surface,
                         borderRadius: BorderRadius.circular(AgoraRadius.md),
                         border: Border.all(
-                          color: AgoraColors.goldContainerBorder,
+                          color: isAi
+                              ? AgoraColors.goldContainerBorder
+                              : AgoraColors.surfaceBorder,
                           width: 1.5,
                         ),
                       ),
@@ -224,14 +310,18 @@ class ItemReceiptsSheet extends ConsumerWidget {
                           Container(
                             padding: const EdgeInsets.all(AgoraSpacing.md),
                             decoration: BoxDecoration(
-                              color: AgoraColors.goldContainer.withValues(
-                                alpha: 0.3,
-                              ),
+                              color: isAi
+                                  ? AgoraColors.goldContainer.withValues(
+                                      alpha: 0.3,
+                                    )
+                                  : AgoraColors.surfaceContainer,
                               borderRadius: BorderRadius.circular(
                                 AgoraRadius.sm,
                               ),
                               border: Border.all(
-                                color: AgoraColors.goldContainerBorder,
+                                color: isAi
+                                    ? AgoraColors.goldContainerBorder
+                                    : AgoraColors.surfaceBorder,
                               ),
                             ),
                             child: Column(
@@ -239,17 +329,21 @@ class ItemReceiptsSheet extends ConsumerWidget {
                               children: [
                                 Row(
                                   children: [
-                                    const Icon(
+                                    Icon(
                                       Icons.anchor,
                                       size: 14,
-                                      color: AgoraColors.goldDark,
+                                      color: isAi
+                                          ? AgoraColors.goldDark
+                                          : AgoraColors.navySubtle,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       'SOURCE ANCHOR · ${sourceMsg.senderDisplayName}',
                                       style: AgoraTypography.labelSmall
                                           .copyWith(
-                                            color: AgoraColors.goldDark,
+                                            color: isAi
+                                                ? AgoraColors.goldDark
+                                                : AgoraColors.navyDark,
                                             fontWeight: FontWeight.w700,
                                           ),
                                     ),
@@ -265,22 +359,30 @@ class ItemReceiptsSheet extends ConsumerWidget {
                                 ),
                                 const SizedBox(height: AgoraSpacing.xs),
                                 Text(
-                                  sourceMsg.isDeleted
-                                      ? '[Message was deleted by author]'
-                                      : sourceMsg.text,
+                                  sourceMsg.text,
                                   style: AgoraTypography.bodyMedium.copyWith(
                                     fontWeight: FontWeight.w500,
-                                    fontStyle: sourceMsg.isDeleted
-                                        ? FontStyle.italic
-                                        : null,
                                   ),
                                 ),
-                                if (sourceMsg.isEdited) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '(edited since handoff)',
-                                    style: AgoraTypography.labelSmall.copyWith(
-                                      color: AgoraColors.navySubtle,
+                                if (isEditedSinceHandoff) ...[
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 1,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AgoraColors.terracottaContainer,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                    child: Text(
+                                      'edited since handoff',
+                                      style: AgoraTypography.labelSmall
+                                          .copyWith(
+                                            color: AgoraColors.terracotta,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                     ),
                                   ),
                                 ],
@@ -326,7 +428,7 @@ class _ContextBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.0),
       child: Text(
-        '${message.senderDisplayName}: ${message.text}',
+        '${message.senderDisplayName}: ${message.isDeleted ? "[Message was deleted]" : message.text}',
         style: AgoraTypography.bodySmall.copyWith(color: AgoraColors.navyMuted),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
@@ -335,8 +437,8 @@ class _ContextBubble extends StatelessWidget {
   }
 }
 
-class _MissingSourceCard extends StatelessWidget {
-  const _MissingSourceCard({required this.sourceId});
+class _DeletedSourceCard extends StatelessWidget {
+  const _DeletedSourceCard({required this.sourceId});
 
   final String sourceId;
 
@@ -353,15 +455,31 @@ class _MissingSourceCard extends StatelessWidget {
       child: Row(
         children: [
           const Icon(
-            Icons.info_outline,
+            Icons.delete_outline,
             color: AgoraColors.navyMuted,
             size: 18,
           ),
           const SizedBox(width: AgoraSpacing.sm),
           Expanded(
-            child: Text(
-              'Source message ($sourceId) is no longer available.',
-              style: AgoraTypography.bodySmall,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Source message deleted',
+                  style: AgoraTypography.bodySmall.copyWith(
+                    fontWeight: FontWeight.w600,
+                    fontStyle: FontStyle.italic,
+                    color: AgoraColors.navyMuted,
+                  ),
+                ),
+                Text(
+                  'ID: $sourceId · Provenance honest reporting preserved.',
+                  style: AgoraTypography.bodySmall.copyWith(
+                    fontSize: 10,
+                    color: AgoraColors.navySubtle,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
