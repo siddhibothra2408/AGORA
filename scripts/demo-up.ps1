@@ -76,6 +76,11 @@ Write-Host "      adb reverse tcp:8080 tcp:8080" -ForegroundColor Gray
 Write-Host "      adb reverse tcp:5001 tcp:5001" -ForegroundColor Gray
 Write-Host "   2. Launch Flutter with host 127.0.0.1:"
 Write-Host "      flutter run -d <phone-id> --dart-define=USE_FIREBASE_EMULATOR=true --dart-define=FIREBASE_EMULATOR_HOST=127.0.0.1"
+Write-Host ""
+Write-Host "C. Google Chrome (Host Web Browser - Zero Android SDK required):" -ForegroundColor White
+Write-Host "   Connects via localhost loopback."
+Write-Host "   Command:" -ForegroundColor Gray
+Write-Host "   flutter run -d chrome --dart-define=USE_FIREBASE_EMULATOR=true --dart-define=FIREBASE_EMULATOR_HOST=localhost"
 Write-Host "----------------------------------------------------------"
 Write-Host "Seeded Demo Accounts (Password: AgoraDemo2026!):" -ForegroundColor White
 Write-Host "  - Maya Lin (Admin): maya@agora.demo  (Consent: Consented)"

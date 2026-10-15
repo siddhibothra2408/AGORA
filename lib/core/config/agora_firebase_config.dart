@@ -18,9 +18,12 @@ abstract final class AgoraFirebaseConfig {
       defaultValue: bool.fromEnvironment('USE_FIREBASE_EMULATOR'),
     ),
     String emulatorHost = const String.fromEnvironment(
-      'EMULATOR_HOST',
-      defaultValue: '10.0.2.2',
-    ), // Standard Android emulator loopback
+      'FIREBASE_EMULATOR_HOST',
+      defaultValue: String.fromEnvironment(
+        'EMULATOR_HOST',
+        defaultValue: '10.0.2.2',
+      ),
+    ), // Standard Android emulator loopback or custom localhost for web / desktop
   }) async {
     try {
       if (Firebase.apps.isNotEmpty) {

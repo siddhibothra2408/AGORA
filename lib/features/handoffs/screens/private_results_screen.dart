@@ -196,7 +196,7 @@ class _PrivateProposalCard extends StatelessWidget {
                     border: Border.all(color: AgoraColors.surfaceBorder),
                   ),
                   child: Text(
-                    'Demo fixture',
+                    'Demo fixture (offline mode)',
                     style: AgoraTypography.labelSmall.copyWith(
                       color: AgoraColors.navySubtle,
                       fontSize: 10,

@@ -349,6 +349,29 @@ class _ProposalCard extends StatelessWidget {
               AgoraBadge(label: badgeLabel, variant: badgeVariant),
               const SizedBox(width: AgoraSpacing.xs),
               const AgoraAiBadge(label: 'PROPOSAL'),
+              if (proposal.payload['provider'] == 'fixture' ||
+                  proposal.payload['providerLabel'] != null) ...[
+                const SizedBox(width: AgoraSpacing.xs),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AgoraColors.surfaceContainer,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: AgoraColors.surfaceBorder),
+                  ),
+                  child: Text(
+                    'Demo fixture (offline mode)',
+                    style: AgoraTypography.labelSmall.copyWith(
+                      color: AgoraColors.navySubtle,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
               const Spacer(),
               if (confidence != null && confidence.isNotEmpty)
                 Container(

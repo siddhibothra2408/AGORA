@@ -173,7 +173,7 @@ class _HandoffLedgerCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  isFixture ? 'Demo fixture' : handoff.provider,
+                  isFixture ? 'Demo fixture (offline mode)' : handoff.provider,
                   style: AgoraTypography.labelSmall.copyWith(
                     color: AgoraColors.navySubtle,
                     fontSize: 10,

@@ -130,6 +130,13 @@ flutter run -d <device-id> \
   --dart-define=FIREBASE_EMULATOR_HOST=127.0.0.1
 ```
 
+#### Option C: Google Chrome Web Browser (Zero Android SDK required)
+```bash
+flutter run -d chrome \
+  --dart-define=USE_FIREBASE_EMULATOR=true \
+  --dart-define=FIREBASE_EMULATOR_HOST=localhost
+```
+
 ---
 
 ## Verification & Testing Gates
@@ -138,12 +145,12 @@ Run the full local gate test suite:
 
 ```bash
 # 1. Code formatting check
-dart format --output=none --set-exit-if-changed .
+dart format --output=none --set-exit-if-changed lib test
 
 # 2. Static analysis
 flutter analyze
 
-# 3. Unit and Widget tests
+# 3. Unit, widget, and acceptance tests (53 tests)
 flutter test
 
 # 4. Functions compilation & tests (requires Node 20+)
@@ -167,6 +174,8 @@ npm test
 
 ## Documentation Index
 
-- [Live Demo Runbook (Oct 15, 2026)](docs/DEMO.md)
-- [Architectural Decisions Log](docs/phase5/DECISIONS.md)
-- [Demo Readiness Final Report](docs/FINAL_REPORT.md)
+- [Viva Defense Cheat Sheet (Oct 16, 2026)](docs/VIVA.md)
+- [Live Demo Runbook](docs/DEMO.md)
+- [Phase 5 Architectural Decisions Log](docs/phase5/DECISIONS.md)
+- [Phase 5 Demo Readiness Final Report](docs/phase5/REPORT.md)
+- [Phase 4 Verification Report](docs/phase4/REPORT.md)

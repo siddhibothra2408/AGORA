@@ -166,7 +166,9 @@ class ItemReceiptsSheet extends ConsumerWidget {
                       ),
                       const Spacer(),
                       Text(
-                        handoff?.provider ?? 'Gemini 1.5 Pro',
+                        handoff?.provider == 'fixture'
+                            ? 'Demo fixture (offline mode)'
+                            : (handoff?.provider ?? 'Gemini 1.5 Pro'),
                         style: AgoraTypography.labelSmall.copyWith(
                           color: AgoraColors.goldDark,
                           fontSize: 10,

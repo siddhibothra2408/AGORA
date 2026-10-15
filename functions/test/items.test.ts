@@ -122,4 +122,37 @@ describe("Phase 4 Backend & Invariants Tests", () => {
       expect(questionActions.includes("answer")).toBe(true);
     });
   });
+
+  describe("Phase 5: Fixture Provider & Seed Guards", () => {
+    it("static test: seed-demo.ts strictly requires emulator environment variables", () => {
+      const seedPath = path.resolve(__dirname, "../scripts/seed-demo.ts");
+      expect(fs.existsSync(seedPath)).toBe(true);
+      const content = fs.readFileSync(seedPath, "utf-8");
+      expect(content.includes("FIRESTORE_EMULATOR_HOST")).toBe(true);
+      expect(content.includes("FIREBASE_AUTH_EMULATOR_HOST")).toBe(true);
+      expect(content.includes("process.exit(1)")).toBe(true);
+    });
+
+    it("static test: pipeline.ts refuses fixture provider outside emulator", () => {
+      const pipelinePath = path.resolve(__dirname, "../src/pipeline.ts");
+      expect(fs.existsSync(pipelinePath)).toBe(true);
+      const content = fs.readFileSync(pipelinePath, "utf-8");
+      expect(content.includes("fixture-refused: Fixture provider is only permitted inside the emulator")).toBe(true);
+      expect(content.includes('provider: "fixture"')).toBe(true);
+    });
+
+    it("static test: no logging of message text, prompts, outputs or secrets", () => {
+      const srcDir = path.resolve(__dirname, "../src");
+      const files = fs.readdirSync(srcDir);
+      for (const file of files) {
+        if (file.endsWith(".ts")) {
+          const content = fs.readFileSync(path.join(srcDir, file), "utf-8");
+          // Ensure no direct logging of message text or prompt content
+          expect(/console\.log\([^)]*message\.text/i.test(content)).toBe(false);
+          expect(/console\.log\([^)]*prompt/i.test(content)).toBe(false);
+          expect(/console\.log\([^)]*apiKey/i.test(content)).toBe(false);
+        }
+      }
+    });
+  });
 });

@@ -340,9 +340,16 @@ async function callProvider(
   purpose: string,
   customInstruction?: string
 ): Promise<{ items: ProposalOutputItem[]; provider: string; model: string }> {
-  const useFixture = process.env.FUNCTIONS_EMULATOR === "true" && process.env.AI_PROVIDER === "fixture";
+  const isFixtureMode = process.env.AI_PROVIDER === "fixture";
 
-  if (useFixture) {
+  if (isFixtureMode) {
+    if (process.env.FUNCTIONS_EMULATOR !== "true") {
+      throw new HttpsError(
+        "failed-precondition",
+        "fixture-refused: Fixture provider is only permitted inside the emulator."
+      );
+    }
+
     const fixturePath = path.resolve(__dirname, "../fixtures/demo-extract.json");
     if (!fs.existsSync(fixturePath)) {
       throw new HttpsError("unavailable", "Demo fixture file unavailable.");
@@ -352,13 +359,12 @@ async function callProvider(
 
     const allowedTokens = new Set(payload.map((p) => p.token));
     const tokenMap = new Map<string, string>(); // anchor match -> token
-    const fullText = payload.map((p) => p.text).join(" ");
 
     const fixtureItems: ProposalOutputItem[] = [];
     for (const p of rawProposals) {
       const anchor = p.anchorContains || "";
-      // Find matching token
-      let matchedToken = payload[0]?.token || "m1";
+      // Match against payload tokens using anchorContains substring
+      let matchedToken: string | null = null;
       for (const pl of payload) {
         if (anchor && pl.text.toLowerCase().includes(anchor.toLowerCase())) {
           matchedToken = pl.token;
@@ -366,7 +372,12 @@ async function callProvider(
         }
       }
 
-      fixtureItems.push({
+      // Unmatched entries skipped
+      if (!matchedToken) {
+        continue;
+      }
+
+      const candidate = {
         type: p.type,
         title: p.title,
         detail: p.description || p.detail || "",
@@ -375,7 +386,12 @@ async function callProvider(
         volunteered: Boolean(p.volunteered),
         sourceRefs: [matchedToken],
         confidence: p.confidence || 0.95,
-      });
+      };
+
+      const validated = validateProposalItem(candidate, allowedTokens, tokenMap);
+      if (validated) {
+        fixtureItems.push(validated);
+      }
     }
 
     return {
