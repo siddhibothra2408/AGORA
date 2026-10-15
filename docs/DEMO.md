@@ -115,50 +115,55 @@ All accounts share the emulator-only demo password: **`AgoraDemo2026!`**
 - **Visual:** Device sends callable function `processExplicitHandoff`. A golden confirmation appears: *"Handoff registered in AI Ledger"*.
 
 ### Step 6: Non-Authoritative Proposal Tray (2:05 - 2:35)
-- **Action:** Open the **AI Proposals Tray**.
-- **Visual:** AI proposals appear in `pending` status:
-  1. **Decision:** *"Use HC-SR04 ultrasonic sensors for bin fill detection"* (Source quote: *"Let's standardize on HC-SR04 ultrasonic sensor..."*).
-  2. **Task:** *"Send project specification draft"* (Assigned to Lena, due Friday Oct 16).
-  3. **Task:** *"Order ultrasonic sensors and mounting brackets"* (Assigned to Ravi, due Oct 14).
-  4. **Task:** *"Measure bin dimensions for custom mounting bracket"*.
-  5. **Question:** *"Who currently holds the lab 3D printer access card?"*.
+- **Action:** Open the **Interactive Proposals Tray** from the private results screen or action button.
+- **Visual:** Proposals render with a gold header: *"AI-generated · proposal · visible only to you"*.
+  - Each item displays type chip (Task/Decision/Question), title, detail, suggested assignee, confidence score, and live **Source Quotes**.
+  - **Honest Provenance:** Source quotes are fetched live from Space messages. If a source was deleted, it displays `"Source message deleted"` with error styling. If edited post-handoff, it displays `"edited since handoff"`.
 - **Talk Track:**
   > *"Crucially: look at the Board. The Board is still clean! AI outputs are strictly Proposals. They have zero system authority. Furthermore, Sam's decision about Arduino Nano was never extracted because his text never reached the model. And Ravi's prompt injection produced no rogue assignments."*
 
-### Step 7: Human Approval, Date Edit, and Dismissal (2:35 - 3:00)
+### Step 7: Human Ratification, Date Edit, and Dismissal (2:35 - 3:00)
 - **Action:**
-  1. On the "Order ultrasonic sensors" task: tap due date, change to **Oct 15**.
-  2. On the "Measure bin dimensions" task: tap **Dismiss** (declined proposal).
-  3. On the Decision and remaining Tasks: tap **Approve to Board**.
+  1. On the "Order ultrasonic sensors" task: tap **Edit**; change due date to **Oct 15** and assign to **Ravi Patel**. Tap Save.
+  2. On the "Measure bin dimensions" task: tap **Dismiss** (declined proposal). The handoff's `dismissedCount` increments.
+  3. On the Decision and remaining Tasks: tap **Accept to Board**.
+- **Result:**
+  - `acceptProposal` callable executes an atomic Firestore transaction.
+  - The item is created in `spaces/{spaceId}/items` with `origin: 'ai'`, `approvedBy: Maya`, and provenance `sourceRefs`.
+  - An `itemCard` message is atomically written to the Space chat previewing the approved item.
 - **Talk Track:**
-  > *"Humans curate the ground truth. We can edit due dates, dismiss hallucinations, and promote approved items to the team board."*
+  > *"Humans curate the ground truth. We can edit due dates and owners, dismiss hallucinations, and promote approved items to the team board. The server writes the itemCard into the chat so the whole team is notified."*
 
 ### Step 8: Multi-Device Real-Time Board & Assignment Acceptance (3:00 - 3:20)
 - **Action:** Switch to **Device 2 (Ravi)**.
 - **Visual:**
-  - Board instantly reflects the newly approved items via Firestore listeners.
-  - Switch to the **Focus** tab on Device 2:
-  - Ravi sees **"Proposed For You: Order ultrasonic sensors and mounting brackets"**.
-  - Ravi taps **"Accept Assignment"**.
+  - The **Board** tab instantly reflects the newly approved items via Firestore listeners across its 4 segments: **Tasks**, **Decisions**, **Questions**, and **All**.
+  - AI-promoted items show the gold chip: **`AI-assisted · approved by Maya Lin`**.
+  - At the top of the Board, Ravi sees the **"Proposed for you"** banner: *"Order ultrasonic sensors and mounting brackets"*.
+  - Ravi taps **"Accept"**; the item's `ownerState` transitions from `proposed` to `accepted`.
 - **Talk Track:**
-  > *"Over on Ravi's device, the Focus tab surfaces items proposed for him. Ravi explicitly accepts the assignment."*
+  > *"Over on Ravi's device, the Board surfaces items proposed for him. Ravi explicitly accepts the assignment, confirming human consent at every step."*
 
-### Step 9: Item Provenance & Gold Footprint Verification (3:20 - 3:40)
-- **Action:** On Device 1, open the approved Decision on the Board.
-- **Visual:** Tap **"PROVENANCE VERIFIED"** gold badge.
-- **Result:** Pops up the exact source quote and anchors to `msg_011`.
+### Step 9: Item Provenance Receipts & Surrounding Context (3:20 - 3:40)
+- **Action:** On Device 1 or 2, tap the approved Decision or Task on the Board, or tap its `itemCard` in the Chat.
+- **Visual:** The **Item Receipts Sheet** opens showing:
+  - **AI Provenance Record:** Provider label (`gemini-1.5-pro`), handoff requester (Maya Lin), handoff timestamp, and human approver.
+  - **Grounding Anchor:** The exact source message quoted with author, timestamp, and text.
+  - **Context Window:** Up to 2 preceding and succeeding chronological chat messages to guarantee complete conversational context.
+  - Honest states: if a source was deleted or edited since handoff, the receipt honestly indicates it.
 - **Talk Track:**
-  > *"Every AI-promoted item carries an immutable receipt back to the exact human message that birthed it. You never have to wonder 'why does this task exist?'"*
+  > *"Every AI-promoted item carries an immutable receipt back to the exact human message that birthed it, complete with surrounding conversation context. You never have to wonder 'why does this task exist?'"*
 
-### Step 10: AI Ledger & Zero Ambient Audit (3:40 - 3:55)
-- **Action:** Tap into the **Pulse** tab, scroll to **AI Audit Ledger**.
-- **Visual:** Shows the exact handoff record:
-  - Handed off by: Maya Lin.
-  - Messages sent: Consented messages only.
-  - Withheld messages: Sam Chen (1 message vetoed).
-  - Proposals generated: 5.
+### Step 10: Chat Gold Footprint Marks & AI Ledger (3:40 - 3:55)
+- **Action:** Return to the Chat screen.
+- **Visual:**
+  - Notice the gold **`AI Seen · 1`** footprint badge on the chat messages included in the handoff (semantic label: *"Included in an AI handoff"*).
+  - Tap the footprint badge: a modal sheet opens listing the handoff details and linking directly to the AI Ledger.
+  - Open the **AI Ledger** from Space Info:
+  - Real-time audit record shows: requester (Maya Lin), purpose, timestamp, included message count, withheld count (Sam Chen's vetoed message), proposal count, and accepted/dismissed outcomes.
+  - Tapping an audit record opens the live ledger detail with message verification and links to promoted Board items.
 - **Talk Track:**
-  > *"Every AI handoff is public and auditable by every space member. Ambient eavesdropping is impossible."*
+  > *"Every message touched by AI receives a visible gold footprint mark. Anyone in the Space can open the AI Ledger to see exactly who handed what to AI, what was withheld, and what became a team commitment. Zero ambient eavesdropping is mathematically verifiable."*
 
 ### Step 11: Deterministic Catch-Up & Pulse (3:55 - 4:10)
 - **Action:** Log in as **Lena Kim**. Open Space.
