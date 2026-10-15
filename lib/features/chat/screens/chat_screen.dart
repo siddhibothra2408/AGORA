@@ -71,17 +71,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _recordLastReadAt() {
-    final uid = ref.read(currentUserIdProvider);
-    if (uid == null || uid.isEmpty) return;
-
-    final now = DateTime.now();
-    if (_lastRecordedTime != null &&
-        now.difference(_lastRecordedTime!).inSeconds < 10) {
-      return;
-    }
-    _lastRecordedTime = now;
-
     try {
+      final uid = ref.read(currentUserIdProvider);
+      if (uid == null || uid.isEmpty) return;
+
+      final now = DateTime.now();
+      if (_lastRecordedTime != null &&
+          now.difference(_lastRecordedTime!).inSeconds < 10) {
+        return;
+      }
+      _lastRecordedTime = now;
+
       ref
           .read(spaceRepositoryProvider)
           .updateLastReadAt(spaceId: widget.spaceId, uid: uid)
