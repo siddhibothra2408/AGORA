@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/firestore_paths.dart';
+import '../../../core/errors/failures.dart';
 import '../../../core/services/firebase_providers.dart';
 import '../../items/models/item.dart';
 import '../models/handoff.dart';
@@ -15,6 +17,8 @@ abstract class HandoffRepository {
     required Proposal proposal,
     required String approvedByUid,
     String? editedTitle,
+    String? editedDetail,
+    ItemType? editedType,
     DateTime? editedDueDate,
     String? assignedTo,
   });
@@ -22,9 +26,10 @@ abstract class HandoffRepository {
 }
 
 class FirestoreHandoffRepository implements HandoffRepository {
-  FirestoreHandoffRepository({this.firestoreInstance});
+  FirestoreHandoffRepository({this.firestoreInstance, this.functionsInstance});
 
   final FirebaseFirestore? firestoreInstance;
+  final FirebaseFunctions? functionsInstance;
 
   @override
   Stream<List<Handoff>> watchHandoffs(String spaceId) {
@@ -64,9 +69,66 @@ class FirestoreHandoffRepository implements HandoffRepository {
     required Proposal proposal,
     required String approvedByUid,
     String? editedTitle,
+    String? editedDetail,
+    ItemType? editedType,
     DateTime? editedDueDate,
     String? assignedTo,
   }) async {
+    // 1. Primary path: Server-side callable function (transactional ratification)
+    final functions = functionsInstance;
+    if (functions != null) {
+      try {
+        final edits = <String, dynamic>{};
+        if (editedTitle != null && editedTitle.trim().isNotEmpty) {
+          edits['title'] = editedTitle.trim();
+        }
+        if (editedDetail != null) {
+          edits['detail'] = editedDetail.trim();
+        }
+        if (editedType != null) {
+          edits['type'] = editedType.value;
+        }
+        if (editedDueDate != null) {
+          edits['dueDate'] = editedDueDate.toUtc().toIso8601String();
+        }
+        if (assignedTo != null) {
+          edits['ownerUid'] = assignedTo;
+        }
+
+        await functions.httpsCallable('acceptProposal').call({
+          'proposalId': proposal.id,
+          if (edits.isNotEmpty) 'edits': edits,
+        });
+        return;
+      } on FirebaseFunctionsException catch (fe) {
+        if (fe.message != null && fe.message!.contains('sources-unavailable')) {
+          throw const DataFailure(
+            'Cannot ratify: All source messages for this proposal were deleted.',
+            'sources-unavailable',
+          );
+        }
+        if (fe.code == 'permission-denied') {
+          throw const DataFailure(
+            'You must be a current space member and the handoff requester to accept proposals.',
+            'permission-denied',
+          );
+        }
+        if (fe.code == 'failed-precondition') {
+          throw DataFailure(
+            fe.message ?? 'This proposal has expired or already been ratified.',
+            'failed-precondition',
+          );
+        }
+        throw DataFailure(
+          'Failed to ratify proposal: ${fe.message ?? fe.code}',
+          fe.code,
+        );
+      } catch (e) {
+        throw DataFailure('Failed to ratify proposal: $e');
+      }
+    }
+
+    // 2. Offline simulation fallback for testing
     final firestore = firestoreInstance;
     if (firestore == null) return;
 
@@ -89,22 +151,22 @@ class FirestoreHandoffRepository implements HandoffRepository {
     final effectiveAssignee =
         assignedTo ?? proposal.payload['suggestedAssigneeUid'] as String?;
 
-    // Mark proposal approved (or edited)
     final newStatus = (editedTitle != null && editedTitle != proposal.title)
         ? ProposalStatus.edited
         : ProposalStatus.approved;
+
     batch.update(proposalRef, {
       'status': newStatus.value,
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // Create item
     final itemData = <String, dynamic>{
       'id': itemRef.id,
       'spaceId': spaceId,
-      'type': proposal.type.value,
+      'type': (editedType ?? proposal.type).value,
       'title': title,
-      'description': proposal.payload['description'] as String? ?? '',
+      'description':
+          editedDetail ?? proposal.payload['description'] as String? ?? '',
       'status': ItemStatus.open.value,
       'sourceHandoffId': proposal.handoffId,
       'sourceMessageIds': proposal.sourceMessageIds,
@@ -128,6 +190,18 @@ class FirestoreHandoffRepository implements HandoffRepository {
 
   @override
   Future<void> dismissProposal({required String proposalId}) async {
+    final functions = functionsInstance;
+    if (functions != null) {
+      try {
+        await functions.httpsCallable('dismissProposal').call({
+          'proposalId': proposalId,
+        });
+        return;
+      } catch (e) {
+        throw DataFailure('Failed to dismiss proposal: $e');
+      }
+    }
+
     final firestore = firestoreInstance;
     if (firestore == null) return;
     await firestore.doc(FirestorePaths.proposal(proposalId)).update({
@@ -139,7 +213,11 @@ class FirestoreHandoffRepository implements HandoffRepository {
 
 final handoffRepositoryProvider = Provider<HandoffRepository>((ref) {
   final firestore = ref.watch(firestoreProvider);
-  return FirestoreHandoffRepository(firestoreInstance: firestore);
+  final functions = ref.watch(firebaseFunctionsProvider);
+  return FirestoreHandoffRepository(
+    firestoreInstance: firestore,
+    functionsInstance: functions,
+  );
 });
 
 final spaceHandoffsProvider = StreamProvider.family<List<Handoff>, String>((
